@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Coupon Enlist</h1>
+
+<section class="grid">
+  <div class="card">
+    <h3>Create Discount Group</h3>
+    <form method="post" action="/coupon-enlist/group">
+      <label>Group Name <input name="name" placeholder="10% Discount Group" required></label>
+      <label>Percent <input type="number" name="percent" min="1" max="100" required></label>
+      <button type="submit">Create Group</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Add Coupons to Group</h3>
+    <form method="post" action="/coupon-enlist/add">
+      <label>Group
+        <select name="group_id" required>
+          {% for g in groups %}
+          <option value="{{ g.id }}">{{ g.percent }}% — {{ g.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Paste Codes (one per line)
+        <textarea name="bulk_codes" rows="8" placeholder="ABC12345&#10;XYZ87990" required></textarea>
+      </label>
+      <button type="submit">Add</button>
+    </form>
+  </div>
+</section>
+
+<h3>Existing Coupons</h3>
+<table class="table">
+  <thead>
+  <tr><th>Code</th><th>Group</th><th>Enlisted</th><th>Assigned To</th></tr>
+  </thead>
+  <tbody>
+  {% for c in coupons %}
+    <tr>
+      <td>{{ c.code }}</td>
+      <td>{{ c.group.percent }}% — {{ c.group.name }}</td>
+      <td>{{ c.enlisted_at.strftime("%Y-%m-%d") }}</td>
+      <td>
+        {% if c.assigned_request_id %}
+          {{ c.assigned_customer_name }} ({{ c.assigned_customer_mobile }})
+        {% else %}
+          <em>Available</em>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

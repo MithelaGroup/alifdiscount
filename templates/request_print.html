@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Request {{ r.request_code }}</title>
+  <style>
+    body{font-family: Arial, sans-serif; padding:20px}
+    table{border-collapse:collapse}
+    td{padding:6px 10px; border-bottom:1px solid #ddd}
+  </style>
+</head>
+<body onload="window.print()">
+  <h2>Discount Request</h2>
+  <table>
+    <tr><td><strong>Request Code</strong></td><td>{{ r.request_code }}</td></tr>
+    <tr><td><strong>Customer</strong></td><td>{{ r.customer_name }}</td></tr>
+    <tr><td><strong>Mobile</strong></td><td>{{ r.customer_mobile }}</td></tr>
+    <tr><td><strong>Status</strong></td><td>{{ r.status }}</td></tr>
+    <tr><td><strong>Discount</strong></td><td>{{ r.discount_percent }}%</td></tr>
+    <tr><td><strong>Coupon</strong></td><td>{{ r.assigned_coupon.code if r.assigned_coupon else '-' }}</td></tr>
+    <tr><td><strong>Invoice</strong></td><td>{{ r.invoice_number or '-' }}</td></tr>
+    <tr><td><strong>Created</strong></td><td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+  </table>
+</body>
+</html>

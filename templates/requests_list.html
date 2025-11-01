@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Requests</h2>
+<h3>Create Request (Cashier)</h3>
+<form method="post" action="/requests/create">
+  <label>Customer Name</label>
+  <input name="customer_name" required>
+  <label>BD Mobile</label>
+  <input name="customer_mobile" required placeholder="01XXXXXXXXX or +8801XXXXXXXXX">
+  <label>Reference By</label>
+  <select name="reference_user_id" required>
+    {% for u in admins %}<option value="{{ u.id }}">{{ u.username }} ({{ u.role }})</option>{% endfor %}
+  </select>
+  <label>Note</label>
+  <textarea name="note"></textarea>
+  <button>Create Request</button>
+</form>
+<hr>
+<h3>All</h3>
+<table>
+  <tr><th>Code</th><th>Customer</th><th>Mobile</th><th>Ref</th><th>Discount</th><th>Status</th><th>Actions</th></tr>
+  {% for r in items %}
+  <tr>
+    <td>{{ r.request_code }}</td>
+    <td>{{ r.customer_name }}</td>
+    <td>{{ r.customer_mobile }}</td>
+    <td>{{ r.reference_user.username }}</td>
+    <td>{% if r.discount_percent %}{{ r.discount_percent }}%{% else %}-{% endif %}</td>
+    <td>{{ r.status }}</td>
+    <td>
+      {% if current.role == 'superadmin' or (current.role == 'admin' and r.reference_user_id == current.id) %}
+        {% if r.status == 'pending' %}
+        <form method="post" action="/requests/{{ r.id }}/approve" style="display:inline">
+          <select name="group_id" required>
+            {% for g in groups %}<option value="{{ g.id }}">{{ g.name }} ({{ g.percent }}%)</option>{% endfor %}
+          </select>
+          <button>Approve</button>
+        </form>
+        {% endif %}
+      {% endif %}
+      {% if r.status == 'approved' and (current.role in ['cashier','admin','superadmin']) %}
+      <form method="post" action="/requests/{{ r.id }}/done" style="display:inline">
+        <input name="invoice_number" placeholder="Invoice no." required>
+        <button>Mark Done</button>
+      </form>
+      {% endif %}
+      <a href="/requests/{{ r.id }}/print" target="_blank">Print/PDF</a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

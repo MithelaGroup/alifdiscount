@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="h2">Setup</h2>
+
+<div class="grid">
+  <section class="card">
+    <h3>SMTP (Microsoft 365)</h3>
+    <p>Configure via your <code>.env</code>:</p>
+    <pre class="code">
+SMTP_HOST=smtp.office365.com
+SMTP_PORT=587
+SMTP_USERNAME=...
+SMTP_PASSWORD=...
+SMTP_FROM=...
+    </pre>
+  </section>
+  <section class="card">
+    <h3>WhatsApp Business Cloud</h3>
+    <pre class="code">
+WHATSAPP_TOKEN=EAAG...
+WHATSAPP_PHONE_NUMBER_ID=...
+WHATSAPP_TEMPLATE_TEXT=Dear {name}, your discount {discount}% has been approved.\nCoupon: {coupon}\nRef: {request_code}\nThank you.
+    </pre>
+    <p class="muted">Current APP_BASE_URL: <strong>{{ conf.APP_BASE_URL }}</strong></p>
+  </section>
+</div>
+{% endblock %}

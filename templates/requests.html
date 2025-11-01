@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Requests · ALIF Discount{% endblock %}
+{% block content %}
+<h2 class="h2">Requests</h2>
+
+<div class="card mb">
+  <a class="btn primary" href="/requests/new">Create Request</a>
+</div>
+
+<section class="card">
+  <div class="card-h"><h3>All Requests</h3></div>
+  <div class="list">
+    {% for r in items %}
+    <div class="row">
+      <div class="grow">
+        <div class="strong">{{ r.customer_name or "—" }}</div>
+        <div class="muted">{{ r.customer_mobile or "—" }}</div>
+      </div>
+      <div class="muted">
+        {{ r.request_code }}{% if r.reference_username %} • Ref: {{ r.reference_username }}{% endif %}
+      </div>
+      <div><span class="badge">{{ r.status }}</span></div>
+    </div>
+    {% else %}
+    <div class="muted">No requests yet.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

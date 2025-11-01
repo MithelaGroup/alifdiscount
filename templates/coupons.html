@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="h2">Coupon Enlist</h2>
+
+<div class="grid">
+  <section class="card">
+    <h3>Create group</h3>
+    <form method="post" action="/coupon-groups/create" class="form">
+      <label>Group name</label>
+      <input name="name" placeholder="e.g., 10% Discount" required>
+      <label>Percent</label>
+      <input name="percent" type="number" min="1" max="99" required>
+      <button class="btn primary">Create group</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h3>Enlist coupons</h3>
+    <form method="post" action="/coupons/enlist" class="form">
+      <label>Group</label>
+      <select name="group_id" required>
+        {% for g in groups %}<option value="{{ g.id }}">{{ g.name }} ({{ g.percent }}%)</option>{% endfor %}
+      </select>
+      <label>Codes (one per line)</label>
+      <textarea name="codes_bulk" rows="6" placeholder="ABC123&#10;ABC124&#10;..."></textarea>
+      <button class="btn primary">Enlist</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h3>All coupons</h3>
+    <div class="table">
+      <div class="tr th">
+        <div>Code</div><div>Group</div><div>Enlisted</div><div>Assigned</div>
+      </div>
+      {% for c in coupons %}
+      <div class="tr">
+        <div class="mono">{{ c.code }}</div>
+        <div>{{ c.group.name }} ({{ c.group.percent }}%)</div>
+        <div class="muted">{{ c.enlisted_at.strftime('%Y-%m-%d %H:%M') }}</div>
+        <div>
+          {% if c.assigned_request %}
+            {{ c.assigned_to_name }} / {{ c.assigned_to_mobile }}
+          {% else %}
+            -
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

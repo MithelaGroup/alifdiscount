@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Request {{ cr.request_code }}</h1>
+<p>Customer: {{ cr.customer_name }} — {{ cr.customer_mobile }}</p>
+<p>Status: {{ cr.status }}</p>
+{% endblock %}

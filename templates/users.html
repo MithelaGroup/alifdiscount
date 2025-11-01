@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Users</h1>
+
+<section class="grid">
+  <div class="card">
+    <h3>Create User</h3>
+    <form method="post" action="/users/create">
+      <label>Username <input name="username" required></label>
+      <label>Email <input name="email" type="email" required></label>
+      <label>Mobile (BD) <input name="mobile" required></label>
+      <label>Role
+        <select name="role" required>
+          {% if user.role == "superadmin" %}
+            <option value="superadmin">Super Admin</option>
+            <option value="admin">Admin</option>
+            <option value="cashier">Cashier</option>
+          {% else %}
+            <option value="cashier">Cashier</option>
+          {% endif %}
+        </select>
+      </label>
+      <label>Password <input type="password" name="password" required></label>
+      <button type="submit">Create</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>All Users</h3>
+    <table class="table">
+      <thead><tr><th>Username</th><th>Email</th><th>Mobile</th><th>Role</th><th>Verified</th></tr></thead>
+      <tbody>
+      {% for u in users %}
+        <tr>
+          <td>{{ u.username }}</td>
+          <td>{{ u.email }}</td>
+          <td>{{ u.mobile }}</td>
+          <td>{{ u.role }}</td>
+          <td>{{ "Yes" if u.email_verified else "No" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

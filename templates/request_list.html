@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="h2">Requests</h2>
+
+<div class="grid">
+  <section class="card">
+    <h3>Create request</h3>
+    <form method="post" action="/requests/create" class="form">
+      <label>Customer name</label>
+      <input name="customer_name" required>
+
+      <label>BD mobile</label>
+      <input name="customer_mobile" required placeholder="01XXXXXXXXX or +8801XXXXXXXXX" list="mobiles">
+      <datalist id="mobiles">
+        {% for c in contacts %}
+        <option value="{{ c.mobile_bd }}">{{ c.full_name }}</option>
+        {% endfor %}
+      </datalist>
+
+      <label>Reference by</label>
+      <select name="reference_user_id" required>
+        {% for u in admins %}<option value="{{ u.id }}">{{ u.username }} ({{ u.role }})</option>{% endfor %}
+      </select>
+
+      <label>Note</label>
+      <textarea name="note" rows="2"></textarea>
+      <button class="btn primary">Create request</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h3>All items</h3>
+    <div class="table">
+      <div class="tr th">
+        <div>Code</div><div>Customer</div><div>Mobile</div><div>Ref</div><div>Discount</div><div>Status</div><div>Actions</div>
+      </div>
+      {% for r in items %}
+      <div class="tr">
+        <div class="mono">{{ r.request_code }}</div>
+        <div>{{ r.customer_name }}</div>
+        <div>{{ r.customer_mobile }}</div>
+        <div class="muted">{{ r.reference_user.username }}</div>
+        <div>{% if r.discount_percent %}{{ r.discount_percent }}%{% else %}-{% endif %}</div>
+        <div>
+          {% if r.status == 'pending' %}<span class="badge warn">Pending</span>{% endif %}
+          {% if r.status == 'approved' %}<span class="badge ok">Approved</span>{% endif %}
+          {% if r.status == 'done' %}<span class="badge info">Done</span>{% endif %}
+        </div>
+        <div class="actions">
+          {% if current.role == 'superadmin' or (current.role == 'admin' and r.reference_user_id == current.id) %}
+            {% if r.status == 'pending' %}
+            <form method="post" action="/requests/{{ r.id }}/approve">
+              <select name="group_id" required>
+                {% for g in groups %}<option value="{{ g.id }}">{{ g.name }} ({{ g.percent }}%)</option>{% endfor %}
+              </select>
+              <button class="btn small">Approve</button>
+            </form>
+            {% endif %}
+          {% endif %}
+
+          {% if r.status == 'approved' and (current.role in ['cashier','admin','superadmin']) %}
+          <form method="post" action="/requests/{{ r.id }}/done">
+            <input name="invoice_number" placeholder="Invoice no." required>
+            <button class="btn small">Mark Done</button>
+          </form>
+          {% endif %}
+
+          {% if r.assigned_coupon and r.discount_percent %}
+            {% set msg = "Dear " ~ r.customer_name ~ ", your discount " ~ r.discount_percent ~ "% is approved. Coupon: " ~ r.assigned_coupon.code ~ " | Ref: " ~ r.request_code ~ " | Thank you." %}
+            <button class="btn small ghost" data-msg="{{ msg }}" data-phone="{{ r.customer_mobile }}" onclick="copyMsg(this)">📋 Copy</button>
+            <button class="btn small ghost" data-msg="{{ msg }}" data-phone="{{ r.customer_mobile }}" onclick="waShare(this)">🟢 WhatsApp</button>
+          {% endif %}
+          <a class="btn small ghost" href="/requests/{{ r.id }}/print" target="_blank">🖨 Print</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Contacts · ALIF Discount{% endblock %}
+{% block content %}
+<h2>Contacts</h2>
+<div class="card">
+  {% if items|length == 0 %}
+    <div class="muted">No contacts yet.</div>
+  {% else %}
+    {% for c in items %}
+      <div class="row">
+        <div class="strong">{{ c.full_name or c.name }}</div>
+        <div class="muted">{{ c.mobile }}</div>
+        <div class="muted">{{ c.created_at }}</div>
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}

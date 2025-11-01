@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    .h { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .row { margin: 4px 0; }
+    .box { border: 1px solid #ccc; padding: 12px; border-radius: 8px; }
+    .small { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="h">Discount Request — {{ cr.request_code }}</div>
+  <div class="box">
+    <div class="row"><b>Customer:</b> {{ cr.customer_name }} — {{ cr.customer_mobile }}</div>
+    <div class="row"><b>Status:</b> {{ cr.status }} {% if cr.discount_group %} ({{ cr.discount_group.percent }}%){% endif %}</div>
+    <div class="row"><b>Reference By:</b> {{ cr.reference_user.username }}</div>
+    <div class="row"><b>Cashier:</b> {{ cr.cashier_user.username }}</div>
+    {% if cr.approved_by_user %}
+      <div class="row"><b>Approved By:</b> {{ cr.approved_by_user.username }} @ {{ cr.approved_at.strftime("%Y-%m-%d %H:%M") }}</div>
+      {% if cr.assigned_coupon %}<div class="row"><b>Coupon:</b> {{ cr.assigned_coupon.code }}</div>{% endif %}
+    {% endif %}
+    {% if cr.invoice_number %}<div class="row"><b>Invoice #:</b> {{ cr.invoice_number }}</div>{% endif %}
+    {% if cr.note %}<div class="row small"><b>Note:</b> {{ cr.note }}</div>{% endif %}
+    <div class="row small">Generated: {{ cr.created_at.strftime("%Y-%m-%d %H:%M") }}</div>
+  </div>
+</body>
+</html>

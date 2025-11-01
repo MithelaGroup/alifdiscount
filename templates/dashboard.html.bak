@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="d-flex align-items-center mb-4">
+    <h1 class="page-title display-5 m-0">Dashboard</h1>
+  </div>
+
+  <div class="card card-rounded shadow-sm">
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Code</th>
+            <th>Customer</th>
+            <th>Mobile</th>
+            <th>Discount</th>
+            <th>Reference</th>
+            <th>Approved by</th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in requests %}
+          <tr>
+            <td class="fw-semibold">{{ r.request_code }}</td>
+            <td>{{ r.customer_name }}</td>
+            <td>{{ r.customer_mobile }}</td>
+            <td>
+              {% if r.discount_percent %}{{ r.discount_percent }}%{% else %}-{% endif %}
+            </td>
+            <td>{{ r.reference_user and r.reference_user.username or "-" }}</td>
+            <td>{{ r.approved_by and r.approved_by.username or "-" }}</td>
+            <td>
+              <span class="badge text-bg-warning badge-pill" style="font-size:.95rem;">{{ r.status }}</span>
+            </td>
+            <td class="text-end">
+              <div class="d-flex gap-2 justify-content-end flex-wrap">
+                <a class="btn btn-link p-0" href="/requests/{{ r.id }}/pdf" target="_blank">PDF</a>
+
+                {% if r.status.name == "PENDING" %}
+                  <form method="post" action="/requests/{{ r.id }}/approve" class="d-flex gap-2">
+                    <select name="group_id" required class="form-select form-select-sm" style="min-width: 260px;">
+                      {% for g in groups %}
+                        <option value="{{ g.id }}">{{ g.percent }}% — {{ g.name }}</option>
+                      {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-primary btn-sm btn-soft">Assign coupon</button>
+                  </form>
+                  <form method="post" action="/requests/{{ r.id }}/reject" class="d-inline">
+                    <button class="btn btn-outline-danger btn-sm btn-soft" type="submit">Reject</button>
+                  </form>
+                {% endif %}
+
+                {% if user.role == "superadmin" %}
+                  <form method="post" action="/requests/{{ r.id }}/delete" class="d-inline"
+                        onsubmit="return confirm('Delete this request?');">
+                    <button class="btn btn-danger btn-sm btn-soft" type="submit">Delete</button>
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="text-center py-4 text-muted">No requests yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endblock %}

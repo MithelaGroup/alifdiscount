@@ -1,0 +1,75 @@
+<!-- templates/base.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}ALIF Discount{% endblock %}</title>
+  <link rel="manifest" href="/static/app.webmanifest" />
+  <style>
+    :root {
+      --bg:#0b1220; --card:#121a2a; --muted:#8da2c0; --text:#e7edf7;
+      --ok:#2ecc71; --warn:#f39c12; --info:#3498db; --err:#e74c3c;
+      --brand:#4cc9f0; --brand2:#4361ee;
+    }
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    a{color:var(--brand);text-decoration:none}
+    a:hover{text-decoration:underline}
+    .container{max-width:1200px;margin:0 auto;padding:16px}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 0}
+    .brand{display:flex;gap:8px;align-items:center;font-weight:700}
+    nav{display:flex;flex-wrap:wrap;gap:8px}
+    nav a{padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.04)}
+    nav a.active{background:linear-gradient(90deg,var(--brand2),var(--brand));color:#fff}
+    .card{background:var(--card);border-radius:14px;padding:16px;margin:12px 0}
+    .muted{color:var(--muted)}
+    .badge{display:inline-block;min-width:22px;padding:2px 8px;border-radius:999px;font-size:12px}
+    .ok{background:#193c2b;color:#9df3c4}
+    .warn{background:#3a2d12;color:#ffd479}
+    .info{background:#1a3147;color:#9ad1ff}
+    .err{background:#3f1e1e;color:#ffb1b1}
+    footer{margin:32px 0 16px 0;color:var(--muted);font-size:14px}
+    /* login centering */
+    .center-wrap{min-height:calc(100vh - 120px);display:grid;place-items:center}
+    .login-card{width:min(420px,92vw)}
+    input,select,textarea,button{
+      width:100%;box-sizing:border-box;border:1px solid #2a3550;background:#0f1524;color:var(--text);
+      padding:10px 12px;border-radius:10px;
+    }
+    button{cursor:pointer;background:linear-gradient(90deg,var(--brand2),var(--brand));border:none}
+    button:hover{filter:brightness(1.06)}
+    .row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+    .row:last-child{border-bottom:none}
+    .strong{font-weight:600}
+    @media (max-width:680px){ nav{gap:6px} .row{flex-direction:column;align-items:flex-start;gap:6px} }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">💳 <span>ALIF Discount</span></div>
+      <nav>
+        {% if user %}
+          <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
+          <a href="/contacts" class="{% if request.url.path.startswith('/contacts') %}active{% endif %}">Contacts</a>
+          <a href="/enlist" class="">Enlist Coupon</a>
+          <a href="/users" class="">Users</a>
+          <a href="/requests" class="{% if request.url.path.startswith('/requests') %}active{% endif %}">Request Create</a>
+          <a href="/settings" class="">Settings</a>
+          <a href="/pwa" class="">PWA</a>
+          <a href="/logout">Logout</a>
+        {% else %}
+          <a href="/login" class="{% if request.url.path.startswith('/login') %}active{% endif %}">Login</a>
+        {% endif %}
+      </nav>
+    </header>
+
+    {% block content %}{% endblock %}
+
+    <footer>
+      <div>&copy; {{ now().year }} ALIF Discount</div>
+    </footer>
+  </div>
+</body>
+</html>

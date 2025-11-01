@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.build/
+dist/
+
+# Virtual env
+.venv/
+venv/
+ENV/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local data & secrets
+data.db
+*.sqlite*
+*.db
+*.db-*
+.env
+.env.local
+.envrc
+
+# Logs
+*.log
+logs/
+nohup.out
+
+# Alembic (if added later) cache
+alembic/versions/__pycache__/

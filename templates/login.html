@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Login · ALIF Discount{% endblock %}
+{% block content %}
+<div class="center-wrap">
+  <section class="card login-card">
+    <h2 class="h2" style="margin:0 0 10px 0;">Sign in</h2>
+    {% if error %}
+      <div class="badge err" style="margin-bottom:10px">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="{{ next or '/' }}" />
+      <label class="muted">Username or Email</label>
+      <input name="login" autocomplete="username" required />
+
+      <div style="height:10px"></div>
+
+      <label class="muted">Password</label>
+      <input name="password" type="password" autocomplete="current-password" required />
+
+      <div style="height:14px"></div>
+      <button type="submit">Sign in</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

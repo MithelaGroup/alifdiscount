@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}New Request{% endblock %}
+
+{% block content %}
+<section class="page">
+  <h1>Create Discount Request</h1>
+
+  <div class="card" style="max-width:680px">
+    <form action="/requests/new" method="post" class="stack gap-3">
+
+      <label>Mobile</label>
+      <input id="mobile" name="mobile" class="input" list="mobiles" autocomplete="tel" required>
+      <datalist id="mobiles"></datalist>
+
+      <label>Customer name</label>
+      <input id="customer_name" name="customer_name" class="input"
+             placeholder="If not suggested above" required>
+
+      <label>Reference</label>
+      <input name="reference" class="input" placeholder="Salesperson / note">
+
+      <div class="mt-4">
+        <button class="btn btn-primary" type="submit">Create</button>
+        <a class="btn" href="/dashboard">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+
+<script>
+  const mobile = document.getElementById('mobile');
+  const customer = document.getElementById('customer_name');
+  const dl = document.getElementById('mobiles');
+
+  let t;
+  mobile.addEventListener('input', () => {
+    clearTimeout(t);
+    const q = mobile.value.trim();
+    if (q.length < 3) { dl.innerHTML=''; return; }
+    t = setTimeout(async () => {
+      try {
+        const r = await fetch('/contacts/search?q=' + encodeURIComponent(q));
+        if (!r.ok) return;
+        const data = await r.json();
+        dl.innerHTML = '';
+        data.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.mobile;
+          opt.label = `${c.name} — ${c.mobile}`;
+          dl.appendChild(opt);
+        });
+      } catch {}
+    }, 200);
+  });
+
+  // when a suggestion is picked, try to fill the name
+  mobile.addEventListener('change', async () => {
+    const val = mobile.value.trim();
+    if (!val) return;
+    try {
+      const r = await fetch('/contacts/search?q=' + encodeURIComponent(val));
+      if (r.ok) {
+        const data = await r.json();
+        const exact = data.find(x => x.mobile === val);
+        if (exact) customer.value = exact.name;
+      }
+    } catch {}
+  });
+</script>
+{% endblock %}

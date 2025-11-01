@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Create Request · ALIF Discount{% endblock %}
+{% block content %}
+<h2 class="h2">Create Request</h2>
+
+<form class="card" method="post" action="/requests/new">
+  <div class="grid2">
+    <div>
+      <label class="lbl">Customer Full Name</label>
+      <input class="inp" name="full_name" required/>
+    </div>
+    <div>
+      <label class="lbl">Mobile (BD)</label>
+      <input class="inp" name="mobile" required placeholder="01XXXXXXXXX / +8801XXXXXXXXX"/>
+    </div>
+  </div>
+
+  <label class="lbl">Reference By</label>
+  <select class="inp" name="reference_user_id" required>
+    {% for u in refs %}
+    <option value="{{ u.id }}">{{ u.username }} ({{ u.role }})</option>
+    {% endfor %}
+  </select>
+
+  <label class="lbl">Notes (optional)</label>
+  <input class="inp" name="notes" placeholder="Extra info for approver"/>
+
+  <button class="btn primary" type="submit">Submit Request</button>
+</form>
+{% endblock %}

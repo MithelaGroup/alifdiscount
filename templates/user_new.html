@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h2 class="h2">Create user</h2>
+<div class="grid">
+  <section class="card">
+    <form method="post" action="/users/new" class="form">
+      <label>Username</label><input name="username" required>
+      <label>Email</label><input name="email" type="email" required>
+      <label>BD mobile</label><input name="mobile_bd" placeholder="01XXXXXXXXX">
+      <label>Role</label>
+      <select name="role" required>
+        {% if current.role == 'superadmin' %}
+          <option value="admin">Admin</option>
+          <option value="cashier">Cashier</option>
+          <option value="superadmin">Super Admin</option>
+        {% else %}
+          <option value="cashier">Cashier</option>
+        {% endif %}
+      </select>
+      <label>Password</label><input name="password" type="password" required>
+      <button class="btn primary">Create</button>
+    </form>
+    {% if request.query_params.get('ok') %}<p class="ok">User created.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

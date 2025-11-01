@@ -1,0 +1,39 @@
+:root{
+  --bg:#0f1729;
+  --card:#121b2f;
+  --muted:#9aa5b1;
+  --text:#eef2f6;
+  --primary:#7c83ff;
+  --primary-2:#4d52d8;
+  --danger:#e5536b;
+  --accent:#1fb389;
+  --border:rgba(255,255,255,.08);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,Segoe UI,Roboto,Helvetica,Arial}
+a{color:#8ebfff;text-decoration:none}
+.topbar{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(90deg,#6b73ff,#0000ff66);box-shadow:0 2px 0 rgba(0,0,0,.2)}
+.brand{font-weight:700;font-size:20px}
+.actions .btn{margin-left:10px}
+.container{padding:24px}
+.page-title{margin:6px 0 18px 0}
+.footer{padding:26px 20px;color:var(--muted)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:18px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{padding:12px 10px;border-bottom:1px solid var(--border)}
+.table thead th{font-size:.9rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.badge{display:inline-block;padding:6px 10px;border-radius:999px;background:#2c2f42;color:#f0d59d;border:1px solid rgba(255,255,255,.08)}
+.nowrap{white-space:nowrap}
+.muted{color:var(--muted)}
+.btn{display:inline-block;border-radius:10px;background:#2b3350;color:var(--text);padding:8px 14px;border:1px solid var(--border)}
+.btn:hover{filter:brightness(1.05)}
+.btn-primary{background:var(--primary);border-color:var(--primary-2)}
+.btn-dark{background:#26304a}
+.btn-danger{background:var(--danger)}
+.btn-outline{background:transparent;border-color:var(--border);color:var(--muted)}
+.form-grid{display:grid;grid-template-columns:160px 1fr;gap:8px 12px}
+.form-inline{display:flex;gap:10px}
+.form-grid input,.form-inline input,.form-grid select{background:#0e1527;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:9px 10px}
+.row-actions{grid-column:1 / -1;margin-top:8px}
+dialog{border:none;border-radius:12px;padding:18px;background:var(--card);color:var(--text);width:360px}
+dialog::backdrop{background:rgba(0,0,0,.6)}

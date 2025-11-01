@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · ALIF Discount{% endblock %}
+{% block content %}
+<h2>Dashboard</h2>
+
+<div class="card">
+  <div class="row" style="border-bottom:none;">
+    <div class="strong">Pending</div>
+    <span class="badge warn">{{ pending|length }}</span>
+  </div>
+  {% if pending|length == 0 %}
+    <div class="muted">No pending requests.</div>
+  {% else %}
+    {% for r in pending %}
+      <div class="row">
+        <div>
+          <div class="strong">{{ r.customer_name or '—' }}</div>
+          <div class="muted">{{ r.customer_mobile or '—' }}</div>
+        </div>
+        <div class="muted">{{ r.request_code }} • Ref: {{ r.reference_username or '—' }}</div>
+        {% if can_act %}
+          <form method="post" action="/requests/{{ r.id }}/approve"><button>Approve</button></form>
+          <form method="post" action="/requests/{{ r.id }}/reject"><button style="background:#6b1b1b">Reject</button></form>
+        {% else %}
+          <span class="badge warn">Pending</span>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="row" style="border-bottom:none;">
+    <div class="strong">Approved</div>
+    <span class="badge ok">{{ approved|length }}</span>
+  </div>
+  {% if approved|length == 0 %}
+    <div class="muted">No approved requests.</div>
+  {% else %}
+    {% for r in approved %}
+      <div class="row">
+        <div>
+          <div class="strong">{{ r.customer_name or '—' }}</div>
+          <div class="muted">{{ r.customer_mobile or '—' }}</div>
+        </div>
+        <div class="muted">
+          {{ r.request_code }}{% if r.discount_percent %} • {{ r.discount_percent }}%{% endif %}
+          {% if r.assigned_coupon_code %} • {{ r.assigned_coupon_code }}{% endif %}
+        </div>
+        {% if can_act %}
+          <form method="post" action="/requests/{{ r.id }}/done"><button>Mark Done</button></form>
+        {% else %}
+          <span class="badge ok">Approved</span>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="row" style="border-bottom:none;">
+    <div class="strong">Done</div>
+    <span class="badge info">{{ done|length }}</span>
+  </div>
+  {% if done|length == 0 %}
+    <div class="muted">No completed items.</div>
+  {% else %}
+    {% for r in done %}
+      <div class="row">
+        <div>
+          <div class="strong">{{ r.customer_name or '—' }}</div>
+          <div class="muted">{{ r.customer_mobile or '—' }}</div>
+        </div>
+        <div class="muted">
+          {{ r.request_code }}{% if r.invoice_number %} • Invoice: {{ r.invoice_number }}{% endif %}
+        </div>
+        <span class="badge info">Done</span>
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>
+{% endblock %}
