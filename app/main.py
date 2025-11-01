@@ -1,60 +1,37 @@
+# app/main.py
 from __future__ import annotations
 
-import os
-from datetime import datetime
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
+from fastapi import FastAPI
 from starlette.templating import Jinja2Templates
 from starlette.staticfiles import StaticFiles
 
-from app import auth  # your existing auth module
-from app.routes_contacts import router as contacts_router  # NEW
+from app import views, auth
 
-APP_DIR = os.path.dirname(__file__)
-TEMPLATES_DIR = os.path.join(APP_DIR, "..", "templates")
-STATIC_DIR = os.path.join(APP_DIR, "..", "static")
+# NEW: contacts router (safe import, no duplicate models)
+from app.routes_contacts import router as contacts_router
 
-def now():
-    return datetime.now()
 
 def create_app() -> FastAPI:
     app = FastAPI(title="ALIF Discount")
 
-    # Static
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    # Templates & static
+    templates = Jinja2Templates(directory="templates")
+    # handy "now" in Jinja
+    import datetime as _dt
 
-    # Templates
-    templates = Jinja2Templates(directory=TEMPLATES_DIR)
+    templates.env.globals["now"] = lambda: _dt.datetime.now()
     app.state.templates = templates
-    app.state.now = now  # expose to templates as callable
 
-    # Sessions & CORS
-    app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET", "change-me"))
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
-    # --- Routers ---
-    # keep your existing routes registration (auth/views/etc.)
-    # Example: app.include_router(auth.router)   # if you use APIRouter for auth
-    app.include_router(contacts_router)  # NEW: Contacts pages
+    # Existing routes
+    views.register_routes(app)
+    auth.register_auth_routes(app)
 
-    # Health
-    @app.get("/healthz")
-    def healthz():
-        return {"ok": True, "time": now().isoformat()}
-
-    # Root -> dashboard or login
-    @app.get("/")
-    async def root(request: Request):
-        user = request.session.get("user")
-        return auth.redirect_to("/dashboard" if user else "/login")
+    # Contacts router
+    app.include_router(contacts_router)
 
     return app
+
 
 app = create_app()
