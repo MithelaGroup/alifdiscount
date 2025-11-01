@@ -1,0 +1,16 @@
+{% set can_finalize = (r.status == 'APPROVED') %}
+<div class="btn-row">
+  {% if r.status == 'PENDING' %}
+    <button class="btn ok"    onclick="openModal('approve-{{ r.id }}')">Approve</button>
+    <button class="btn danger" onclick="openModal('reject-{{ r.id }}')">Reject</button>
+  {% endif %}
+  <a class="btn outline" href="/requests/{{ r.id }}" target="_blank">Preview</a>
+  {% if can_finalize %}
+    <button class="btn info" onclick="openModal('finalize-{{ r.id }}')">Finalize</button>
+  {% endif %}
+  {% if user and user.role == 'SUPERADMIN' %}
+    <form method="post" action="/requests/{{ r.id }}/delete" style="display:inline">
+      <button class="btn danger" onclick="return confirm('Delete this request?')">Delete</button>
+    </form>
+  {% endif %}
+</div>
