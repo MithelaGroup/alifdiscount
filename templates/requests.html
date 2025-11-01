@@ -1,29 +1,89 @@
 {% extends "base.html" %}
-{% block title %}Requests · ALIF Discount{% endblock %}
 {% block content %}
-<h2 class="h2">Requests</h2>
+<div class="page">
 
-<div class="card mb">
-  <a class="btn primary" href="/requests/new">Create Request</a>
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="h2">Requests</h2>
+    <div class="muted">Showing {{ requests|length if requests is defined else 0 }} items</div>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:110px;">Code</th>
+            <th>Customer Name & Mobile</th>
+            <th>Cashier</th>
+            <th>Reference of</th>
+            <th>Approved by</th>
+            <th style="width:120px;">Status</th>
+            <th style="width:360px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set items = requests if requests is defined else [] %}
+          {% if items and items|length %}
+            {% for r in items %}
+            <tr id="row-{{ r.id }}">
+              <td class="mono">{{ r.request_code }}</td>
+              <td>
+                <div class="strong">{{ r.customer_name }}</div>
+                <div class="muted">{{ r.customer_mobile }}</div>
+              </td>
+              <td>{{ (r.created_by and r.created_by.username) or '-' }}</td>
+              <td>{{ (r.reference_user and r.reference_user.username) or '-' }}</td>
+              <td>{{ (r.approved_by and r.approved_by.username) or '-' }}</td>
+              <td>
+                {% if r.status in ['PENDING','REQUESTED'] %}
+                  <span class="badge warn">Requested</span>
+                {% elif r.status in ['APPROVED'] %}
+                  <span class="badge ok">Approved</span>
+                {% elif r.status in ['DONE','COMPLETED'] %}
+                  <span class="badge info">Completed</span>
+                {% elif r.status in ['REJECTED'] %}
+                  <span class="badge error">Rejected</span>
+                {% else %}
+                  <span class="badge">{{ r.status }}</span>
+                {% endif %}
+              </td>
+              <td class="actions">
+                {% if r.status in ['PENDING','REQUESTED'] %}
+                <button class="btn btn-sm btn-ok" data-action="approve" data-rid="{{ r.id }}">Approve</button>
+                {% endif %}
+
+                {% if r.status in ['APPROVED'] %}
+                <button class="btn btn-sm btn-info" data-action="finalize" data-rid="{{ r.id }}">Finalize</button>
+                {% endif %}
+
+                {% if r.status not in ['DONE','COMPLETED','REJECTED'] %}
+                <button class="btn btn-sm btn-warn" data-action="reject" data-rid="{{ r.id }}">Reject</button>
+                {% endif %}
+
+                <a class="btn btn-sm" href="/requests?rid={{ r.id }}" target="_blank" rel="noopener">Preview</a>
+                <button class="btn btn-sm btn-danger" data-action="delete" data-rid="{{ r.id }}" style="display:none;">Delete</button>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="7" class="muted">No requests.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card-f">
+      <div class="grow"></div>
+      {% set page = page if page is defined else 1 %}
+      {% if page > 1 %}<a class="btn" href="/requests?p={{ page-1 }}">Previous</a>{% endif %}
+      <span class="muted">Page {{ page }}</span>
+      {% if has_next %}<a class="btn" href="/requests?p={{ page+1 }}">Next</a>{% endif %}
+    </div>
+  </div>
 </div>
 
-<section class="card">
-  <div class="card-h"><h3>All Requests</h3></div>
-  <div class="list">
-    {% for r in items %}
-    <div class="row">
-      <div class="grow">
-        <div class="strong">{{ r.customer_name or "—" }}</div>
-        <div class="muted">{{ r.customer_mobile or "—" }}</div>
-      </div>
-      <div class="muted">
-        {{ r.request_code }}{% if r.reference_username %} • Ref: {{ r.reference_username }}{% endif %}
-      </div>
-      <div><span class="badge">{{ r.status }}</span></div>
-    </div>
-    {% else %}
-    <div class="muted">No requests yet.</div>
-    {% endfor %}
-  </div>
-</section>
+<!-- Reuse the same modals & scripts from dashboard -->
+{% include 'partials/_modals_actions.html' %}
+{% include 'partials/_scripts_actions.html' %}
+
 {% endblock %}
