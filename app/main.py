@@ -1,63 +1,60 @@
-from __future__ import annotations
-
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.staticfiles import StaticFiles
+from starlette.responses import RedirectResponse
 from starlette.templating import Jinja2Templates
 
-# Routers
+# local modules
+from app.config import settings  # expects object with secret_key, app_name, etc.
 from app import auth
-from app import views
+from app.views import register_routes  # we’ll call this to add all page routes
 
-APP_DIR = Path(__file__).resolve().parent
-ROOT_DIR = APP_DIR.parent
-TEMPLATES_DIR = ROOT_DIR / "templates"
-STATIC_DIR = ROOT_DIR / "static"
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+TEMPLATES_DIR = BASE_DIR / "templates"
+STATIC_DIR = BASE_DIR / "static"
+
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="ALIF Discount")
+    app = FastAPI(title=getattr(settings, "app_name", "ALIF Discount"))
 
-    # CORS (relaxed; tighten if you want)
+    # Sessions (for login state)
+    app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, https_only=False)
+
+    # CORS (relaxed; adjust for your origin)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        allow_credentials=True,
     )
 
-    # Sessions
-    session_secret = os.getenv("SESSION_SECRET", "dev-secret-change-me")
-    app.add_middleware(SessionMiddleware, secret_key=session_secret)
+    # Static
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     # Templates
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    # make a `now()` helper available to Jinja (fixes the UndefinedError in your log)
+    templates.env.globals["now"] = lambda: datetime.now(timezone.utc)
+    templates.env.globals["app_name"] = getattr(settings, "app_name", "ALIF Discount")
+    app.state.templates = templates  # store for easy access
 
-    # jinja helpers (fixes: jinja2.exceptions.UndefinedError: 'now' is undefined)
-    def _now():
-        return datetime.now(timezone.utc)
+    # Routers / routes
+    auth.register_routes(app)       # /login, /logout etc.
+    register_routes(app)            # dashboard, contacts, users, requests, enlist, …
 
-    templates.env.globals.update({
-        "now": _now,
-    })
+    @app.get("/", include_in_schema=False)
+    def index(_: Request):
+        # send anonymous users to /login, others to /dashboard (auth.login_required already guards /dashboard)
+        return RedirectResponse(url="/dashboard")
 
-    app.state.templates = templates  # for request.app.state.templates
-
-    # Static files
-    if STATIC_DIR.exists():
-        app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-    # Routers
-    app.include_router(auth.router)
-    app.include_router(views.router)
-
-    # Health
-    @app.get("/healthz")
+    # simple health check
+    @app.get("/healthz", include_in_schema=False)
     def healthz():
         return {"ok": True, "ts": datetime.utcnow().isoformat()}
 
