@@ -1,353 +1,127 @@
 {% extends "base.html" %}
+{% block title %}Dashboard — ALIF Discount{% endblock %}
 {% block content %}
-<div class="page">
 
-  <h2 class="h2 mb-6">Dashboard</h2>
+<h2 class="h2">Dashboard</h2>
 
-  <!-- Summary tiles -->
-  <div class="grid gap-4 md:grid-cols-3">
-    <!-- Pending -->
-    <section class="card">
-      <div class="card-h">
-        <h3>Pending</h3>
-        <span class="badge warn">{{ pending|length if pending is defined else 0 }}</span>
-      </div>
-      <div class="list">
-        {% if pending and pending|length %}
-          {% for r in pending %}
-          <div class="row">
-            <div>
-              <div class="strong">{{ r.customer_name }}</div>
-              <div class="muted">{{ r.customer_mobile }}</div>
-            </div>
-            <div class="muted">
-              {{ r.request_code }}
-              {% if r.reference_user %} • Ref: {{ r.reference_user.username }}{% endif %}
-            </div>
-            <div><span class="badge warn">Pending</span></div>
-          </div>
-          {% endfor %}
-        {% else %}
-          <div class="muted">No pending requests.</div>
-        {% endif %}
-      </div>
-    </section>
-
-    <!-- Approved -->
-    <section class="card">
-      <div class="card-h">
-        <h3>Approved</h3>
-        <span class="badge ok">{{ approved|length if approved is defined else 0 }}</span>
-      </div>
-      <div class="list">
-        {% if approved and approved|length %}
-          {% for r in approved %}
-          <div class="row">
-            <div>
-              <div class="strong">{{ r.customer_name }}</div>
-              <div class="muted">{{ r.customer_mobile }}</div>
-            </div>
-            <div class="muted">
-              {{ r.request_code }}
-              {% if r.discount_percent %} • {{ r.discount_percent }}%{% endif %}
-              {% if r.assigned_coupon %} • {{ r.assigned_coupon.code }}{% endif %}
-            </div>
-            <div><span class="badge ok">Approved</span></div>
-          </div>
-          {% endfor %}
-        {% else %}
-          <div class="muted">No approved requests.</div>
-        {% endif %}
-      </div>
-    </section>
-
-    <!-- Done -->
-    <section class="card">
-      <div class="card-h">
-        <h3>Done</h3>
-        <span class="badge info">{{ done|length if done is defined else 0 }}</span>
-      </div>
-      <div class="list">
-        {% if done and done|length %}
-          {% for r in done %}
-          <div class="row">
-            <div>
-              <div class="strong">{{ r.customer_name }}</div>
-              <div class="muted">{{ r.customer_mobile }}</div>
-            </div>
-            <div class="muted">{{ r.request_code }}{% if r.invoice_number %} • {{ r.invoice_number }}{% endif %}</div>
-            <div><span class="badge info">Done</span></div>
-          </div>
-          {% endfor %}
-        {% else %}
-          <div class="muted">No completed items.</div>
-        {% endif %}
-      </div>
-    </section>
-  </div>
-
-  <!-- Requests table -->
-  <div class="card mt-8">
+<div class="cards3">
+  <!-- Pending -->
+  <section class="card">
     <div class="card-h">
-      <h3>Latest Requests</h3>
-      <span class="muted">max 10 per page</span>
+      <h3>Pending</h3>
+      <span class="badge warn">{{ pending|length }}</span>
+    </div>
+    <div class="list">
+      {% for r in pending %}
+      <div class="row">
+        <div>
+          <div class="strong">{{ r.customer_name }}</div>
+          <div class="muted">{{ r.customer_mobile }}</div>
+        </div>
+        <div class="muted">{{ r.request_code }} • Ref: {{ r.reference_user.username }}</div>
+        <div><span class="badge warn">Pending</span></div>
+      </div>
+      {% else %}
+      <div class="muted">No pending requests.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- Approved -->
+  <section class="card">
+    <div class="card-h">
+      <h3>Approved</h3>
+      <span class="badge ok">{{ approved|length }}</span>
+    </div>
+    <div class="list">
+      {% for r in approved %}
+      <div class="row">
+        <div>
+          <div class="strong">{{ r.customer_name }}</div>
+          <div class="muted">{{ r.customer_mobile }}</div>
+        </div>
+        <div class="muted">
+          {{ r.request_code }} • {{ r.discount_percent }}%
+          {% if r.assigned_coupon %} • {{ r.assigned_coupon.code }}{% endif %}
+        </div>
+        <div><span class="badge ok">Approved</span></div>
+      </div>
+      {% else %}
+      <div class="muted">No approved requests.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- Done -->
+  <section class="card">
+    <div class="card-h">
+      <h3>Done</h3>
+      <span class="badge info">{{ done|length }}</span>
+    </div>
+    <div class="list">
+      {% for r in done %}
+      <div class="row">
+        <div>
+          <div class="strong">{{ r.customer_name }}</div>
+          <div class="muted">{{ r.customer_mobile }}</div>
+        </div>
+        <div class="muted">
+          {{ r.request_code }} • Invoice: {{ r.invoice_number }}
+        </div>
+        <div><span class="badge info">Done</span></div>
+      </div>
+      {% else %}
+      <div class="muted">No completed items.</div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<!-- Latest requests table -->
+<section class="card" style="margin-top:18px;">
+  <div class="card-h">
+    <h3>Latest Requests</h3>
+    <div class="muted">max 10 per page</div>
+  </div>
+
+  <div class="table">
+    <div class="tr head">
+      <div>Code</div>
+      <div>Customer Name & Mobile</div>
+      <div>Cashier</div>
+      <div>Reference</div>
+      <div>Approved by</div>
+      <div>Status</div>
+      <div class="right">Actions</div>
     </div>
 
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th style="width:110px;">Code</th>
-            <th>Customer Name & Mobile</th>
-            <th>Cashier</th>
-            <th>Reference of</th>
-            <th>Approved by</th>
-            <th style="width:120px;">Status</th>
-            <th style="width:360px;">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% set items = requests if requests is defined else [] %}
-          {% if items and items|length %}
-            {% for r in items %}
-            <tr id="row-{{ r.id }}">
-              <td class="mono">{{ r.request_code }}</td>
-              <td>
-                <div class="strong">{{ r.customer_name }}</div>
-                <div class="muted">{{ r.customer_mobile }}</div>
-              </td>
-              <td>{{ (r.created_by and r.created_by.username) or '-' }}</td>
-              <td>{{ (r.reference_user and r.reference_user.username) or '-' }}</td>
-              <td>{{ (r.approved_by and r.approved_by.username) or '-' }}</td>
-              <td>
-                {% if r.status in ['PENDING','REQUESTED'] %}
-                  <span class="badge warn">Requested</span>
-                {% elif r.status in ['APPROVED'] %}
-                  <span class="badge ok">Approved</span>
-                {% elif r.status in ['DONE','COMPLETED'] %}
-                  <span class="badge info">Completed</span>
-                {% elif r.status in ['REJECTED'] %}
-                  <span class="badge error">Rejected</span>
-                {% else %}
-                  <span class="badge">{{ r.status }}</span>
-                {% endif %}
-              </td>
-              <td class="actions">
-                <!-- Approve -->
-                {% if r.status in ['PENDING','REQUESTED'] %}
-                <button class="btn btn-sm btn-ok" data-action="approve" data-rid="{{ r.id }}">Approve</button>
-                {% endif %}
-
-                <!-- Finalize -->
-                {% if r.status in ['APPROVED'] %}
-                <button class="btn btn-sm btn-info" data-action="finalize" data-rid="{{ r.id }}">Finalize</button>
-                {% endif %}
-
-                <!-- Reject (not for completed) -->
-                {% if r.status not in ['DONE','COMPLETED','REJECTED'] %}
-                <button class="btn btn-sm btn-warn" data-action="reject" data-rid="{{ r.id }}">Reject</button>
-                {% endif %}
-
-                <!-- Preview (opens in new tab; adjust URL in backend if you have a detail route) -->
-                <a class="btn btn-sm" href="/requests?rid={{ r.id }}" target="_blank" rel="noopener">Preview</a>
-
-                <!-- Delete (only superadmin, keep server-side auth) -->
-                <button class="btn btn-sm btn-danger" data-action="delete" data-rid="{{ r.id }}" style="display:none;">Delete</button>
-              </td>
-            </tr>
-            {% endfor %}
-          {% else %}
-            <tr><td colspan="7" class="muted">No requests to show.</td></tr>
-          {% endif %}
-        </tbody>
-      </table>
-    </div>
-
-    <!-- paging -->
-    <div class="card-f">
-      <div class="grow"></div>
-      <div class="pagination">
-        {% set page = page if page is defined else 1 %}
-        {% if page > 1 %}
-          <a class="btn" href="/?p={{ page - 1 }}">Previous</a>
-        {% endif %}
-        <span class="muted">Page {{ page }}</span>
-        {% if has_next %}
-          <a class="btn" href="/?p={{ page + 1 }}">Next</a>
-        {% endif %}
+    {% for r in latest %}
+    <div class="tr">
+      <div class="mono">{{ r.request_code }}</div>
+      <div>
+        <div class="strong">{{ r.customer_name }}</div>
+        <div class="muted">{{ r.customer_mobile }}</div>
+      </div>
+      <div>{{ r.cashier.username }}</div>
+      <div>{{ r.reference_user.username }}</div>
+      <div>{{ r.approved_by_user and r.approved_by_user.username or '-' }}</div>
+      <div>
+        {% if r.status == 'PENDING' %}<span class="badge warn">Requested</span>
+        {% elif r.status == 'APPROVED' %}<span class="badge ok">Approved</span>
+        {% elif r.status == 'DONE' %}<span class="badge info">Completed</span>
+        {% elif r.status == 'REJECTED' %}<span class="badge danger">Rejected</span>
+        {% else %}<span class="badge">{{ r.status }}</span>{% endif %}
+      </div>
+      <div class="right">
+        {% include 'partials/_row_actions.html' %}
       </div>
     </div>
+
+    {% include 'partials/_modals_actions.html' %}
+    {% else %}
+      <div class="muted" style="padding:12px;">No requests yet.</div>
+    {% endfor %}
   </div>
-
-</div>
-
-<!-- Approve modal -->
-<div id="approve-modal" class="modal hidden">
-  <div class="modal-box">
-    <div class="modal-h">
-      <h3>Approve & assign coupon</h3>
-      <button class="icon close" data-close="approve-modal" aria-label="Close">&times;</button>
-    </div>
-    <div class="modal-b">
-      <form id="approve-form" onsubmit="return false;">
-        <input type="hidden" id="approve-rid" />
-        <label class="label">Discount group</label>
-        <select id="approve-group" class="input" required>
-          {% if discount_groups and discount_groups|length %}
-            {% for g in discount_groups %}
-              <option value="{{ g.id }}">{{ g.name }}</option>
-            {% endfor %}
-          {% else %}
-            <option value="">No groups found</option>
-          {% endif %}
-        </select>
-        <p class="muted mt-2">One coupon from the selected group will be assigned and sent by WhatsApp.</p>
-      </form>
-    </div>
-    <div class="modal-f">
-      <button class="btn" data-close="approve-modal">Cancel</button>
-      <button class="btn btn-ok" id="approve-submit">Confirm</button>
-    </div>
-  </div>
-</div>
-
-<!-- Finalize modal -->
-<div id="finalize-modal" class="modal hidden">
-  <div class="modal-box">
-    <div class="modal-h">
-      <h3>Finalize request</h3>
-      <button class="icon close" data-close="finalize-modal" aria-label="Close">&times;</button>
-    </div>
-    <div class="modal-b">
-      <form id="finalize-form" onsubmit="return false;">
-        <input type="hidden" id="finalize-rid" />
-        <label class="label">Invoice number</label>
-        <input id="finalize-invoice" class="input" placeholder="e.g. INV-2025-0001" required />
-
-        <label class="label mt-3">Discount amount (BDT)</label>
-        <input id="finalize-amount" class="input" type="number" min="0" step="0.01" placeholder="0.00" required />
-      </form>
-    </div>
-    <div class="modal-f">
-      <button class="btn" data-close="finalize-modal">Cancel</button>
-      <button class="btn btn-info" id="finalize-submit">Submit</button>
-    </div>
-  </div>
-</div>
-
-<style>
-/* Light utility CSS to cooperate with your existing theme.css */
-.table-wrap { overflow-x:auto; }
-.table { width:100%; border-collapse:separate; border-spacing:0 8px; }
-.table th { text-align:left; font-weight:600; opacity:.85; padding:.75rem 1rem; }
-.table td { vertical-align:top; padding:.75rem 1rem; }
-.table tbody tr { background: var(--card-bg, #111827); border-radius:12px; }
-.table tbody tr td:first-child { border-top-left-radius:12px; border-bottom-left-radius:12px; }
-.table tbody tr td:last-child { border-top-right-radius:12px; border-bottom-right-radius:12px; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-
-.modal.hidden{ display:none; }
-.modal{ position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:60; }
-.modal-box{ width:min(560px, 92vw); background:var(--card-bg, #0f172a); border:1px solid rgba(255,255,255,.06); border-radius:16px; box-shadow:0 20px 50px rgba(0,0,0,.45); }
-.modal-h,.modal-f{ display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-bottom:1px solid rgba(255,255,255,.06);}
-.modal-f{ border-top:1px solid rgba(255,255,255,.06); border-bottom:none;}
-.modal-b{ padding:1rem 1.25rem; }
-.label{ display:block; font-size:.9rem; opacity:.85; margin-bottom:.35rem; }
-.input{ width:100%; padding:.6rem .8rem; border-radius:.6rem; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.04); }
-.btn{ padding:.5rem .8rem; border-radius:.6rem; border:1px solid rgba(255,255,255,.08); }
-.btn-sm{ padding:.35rem .6rem; font-size:.9rem; }
-.btn-ok{ background:rgba(16,185,129,.15); border-color:rgba(16,185,129,.25); }
-.btn-warn{ background:rgba(245,158,11,.15); border-color:rgba(245,158,11,.25); }
-.btn-info{ background:rgba(59,130,246,.15); border-color:rgba(59,130,246,.25); }
-.btn-danger{ background:rgba(239,68,68,.15); border-color:rgba(239,68,68,.25); }
-.badge{ padding:.2rem .55rem; border-radius:999px; font-size:.8rem; opacity:.9; display:inline-block;}
-.badge.warn{ background:rgba(245,158,11,.15); }
-.badge.ok{ background:rgba(16,185,129,.15); }
-.badge.info{ background:rgba(59,130,246,.15); }
-.badge.error{ background:rgba(239,68,68,.15); }
-.card-f{ display:flex; align-items:center; gap:.75rem; padding: .75rem 1rem; }
-.grow{ flex:1; }
-.actions .btn{ margin-right:.35rem; margin-bottom:.35rem; }
-</style>
-
-<script>
-(function(){
-  // helpers
-  const $ = (sel, root=document)=>root.querySelector(sel);
-  const $$ = (sel, root=document)=>Array.from(root.querySelectorAll(sel));
-  const openModal = id => { $('#' + id).classList.remove('hidden'); };
-  const closeModal = id => { $('#' + id).classList.add('hidden'); };
-
-  // close handlers
-  $$('[data-close]').forEach(b=>{
-    b.addEventListener('click', ()=> closeModal(b.getAttribute('data-close')));
-  });
-
-  // click actions on table
-  document.addEventListener('click', async (e)=>{
-    const btn = e.target.closest('[data-action]');
-    if(!btn) return;
-    const rid = btn.getAttribute('data-rid');
-    const action = btn.getAttribute('data-action');
-
-    if(action === 'approve'){
-      $('#approve-rid').value = rid;
-      openModal('approve-modal');
-      return;
-    }
-
-    if(action === 'finalize'){
-      $('#finalize-rid').value = rid;
-      $('#finalize-invoice').value = '';
-      $('#finalize-amount').value = '';
-      openModal('finalize-modal');
-      return;
-    }
-
-    if(action === 'reject'){
-      if(!confirm('Reject this request?')) return;
-      await fetch(`/requests/${rid}/reject`, {method:'POST'});
-      location.reload();
-      return;
-    }
-
-    if(action === 'delete'){
-      if(!confirm('Delete permanently? (Super Admin only)')) return;
-      await fetch(`/requests/${rid}/delete`, {method:'POST'}).catch(()=>{});
-      location.reload();
-      return;
-    }
-  });
-
-  // approve submit
-  $('#approve-submit')?.addEventListener('click', async ()=>{
-    const rid = $('#approve-rid').value;
-    const gid = $('#approve-group').value;
-    if(!gid){ alert('Select a discount group.'); return; }
-    const res = await fetch(`/requests/${rid}/approve`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ discount_group_id: gid })
-    });
-    if(res.ok){ location.reload(); }
-    else{ alert('Approve failed. Please check permissions and group availability.'); }
-  });
-
-  // finalize submit
-  $('#finalize-submit')?.addEventListener('click', async ()=>{
-    const rid = $('#finalize-rid').value;
-    const invoice = $('#finalize-invoice').value.trim();
-    const amount = parseFloat($('#finalize-amount').value);
-    if(!invoice || !(amount >= 0)){ alert('Enter invoice and discount amount.'); return; }
-    const res = await fetch(`/requests/${rid}/done`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ invoice_number: invoice, discount_amount: amount })
-    });
-    if(res.ok){ location.reload(); }
-    else{ alert('Finalize failed.'); }
-  });
-})();
-</script>
+</section>
 
 {% endblock %}
