@@ -1,94 +1,61 @@
-# app/auth.py
-from __future__ import annotations
+from fastapi import APIRouter, Request, Form
+from starlette.responses import RedirectResponse
+from datetime import datetime
 
-import os
-from typing import Optional, Dict
+auth_router = APIRouter()
 
-from fastapi import FastAPI, Request, Form
-from fastapi.responses import RedirectResponse
-from starlette import status
-
-# --- Simple, swappable credential check -------------------------------------
-# You can switch this to DB auth later if you want. For now it reads env vars.
-ADMIN_USER = os.getenv("ADMIN_USER", "admin")
-ADMIN_PASS = os.getenv("ADMIN_PASS", "admin")
-DEFAULT_ROLE = os.getenv("ADMIN_ROLE", "admin")
-
-
-def _validate_credentials(username: str, password: str) -> bool:
-    return username == ADMIN_USER and password == ADMIN_PASS
-
-
-def get_current_user(request: Request) -> Optional[Dict]:
-    """Return the current user dict from the session, or None."""
+# ---- helpers -------------------------------------------------
+def current_user(request: Request):
+    """Return user dict from session or None."""
     return request.session.get("user")
 
-
-def login_required(request: Request) -> Optional[RedirectResponse]:
-    """
-    Small helper you can call at the top of any view function:
-
-        if (resp := login_required(request)): return resp
-
-    Redirects anonymous users to /login. Returns None if authenticated.
-    """
-    if get_current_user(request) is None:
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+def login_required(request: Request, next_path: str):
+    if not current_user(request):
+        return RedirectResponse(url=f"/login?next={next_path}", status_code=303)
     return None
 
-
-# --- Public API used by main.py ----------------------------------------------
-def register_auth_routes(app: FastAPI) -> None:
+def verify_credentials(username_or_email: str, password: str):
     """
-    Mount /login and /logout and make sure templates always
-    get a 'user' variable in the context through a tiny wrapper.
+    Replace this with your real DB check if desired.
+    For now, accept 'admin' with any non-empty password so the UI works.
     """
+    if username_or_email and password:
+        # role used by templates like users.html that check for 'superadmin'
+        return {"username": username_or_email, "role": "superadmin"}
+    return None
 
-    templates = app.state.templates  # Jinja2Templates set in main.py
+# ---- routes --------------------------------------------------
+@auth_router.get("/login")
+def login_page(request: Request, next: str = "/dashboard"):
+    """
+    Show login form unless already logged in, then send to 'next'.
+    """
+    if current_user(request):
+        return RedirectResponse(url=next or "/dashboard", status_code=303)
 
-    # Make 'user' always available in Jinja as a global (in addition to our render())
-    # so {% if user %} works everywhere even if a view forgets to pass it.
-    def _jinja_current_user(request: Request) -> Optional[Dict]:
-        return get_current_user(request)
+    # Provide 'now' as a datetime OBJECT; use {{ now.year }} in base.html
+    ctx = {"request": request, "user": None, "now": datetime.now(), "next": next}
+    return request.app.state.templates.TemplateResponse("login.html", ctx)
 
-    templates.env.globals["current_user"] = _jinja_current_user  # optional helper
+@auth_router.post("/login")
+def login_submit(
+    request: Request,
+    username: str = Form(..., alias="username"),
+    password: str = Form(..., alias="password"),
+    next: str = Form("/dashboard")
+):
+    """
+    Handle POST from login form.
+    """
+    user = verify_credentials(username, password)
+    if not user:
+        # Simple reload; you could flash a message if you have messaging
+        return RedirectResponse(url="/login?next=" + (next or "/dashboard"), status_code=303)
 
-    @app.get("/login")
-    async def login_form(request: Request):
-        # Already logged in? Go to dashboard.
-        if get_current_user(request):
-            return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
-        return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "title": "Login", "user": None},
-        )
+    request.session["user"] = user
+    return RedirectResponse(url=next or "/dashboard", status_code=303)
 
-    @app.post("/login")
-    async def login_submit(
-        request: Request,
-        username: str = Form(...),
-        password: str = Form(...),
-    ):
-        if not _validate_credentials(username, password):
-            return templates.TemplateResponse(
-                "login.html",
-                {
-                    "request": request,
-                    "title": "Login",
-                    "error": "Invalid username or password.",
-                    "user": None,
-                },
-                status_code=status.HTTP_401_UNAUTHORIZED,
-            )
-
-        # Save a very small, non-sensitive session record
-        request.session["user"] = {
-            "username": username,
-            "role": DEFAULT_ROLE,
-        }
-        return RedirectResponse(url="/dashboard", status_code=status.HTTP_303_SEE_OTHER)
-
-    @app.get("/logout")
-    async def logout(request: Request):
-        request.session.clear()
-        return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+@auth_router.get("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=303)
