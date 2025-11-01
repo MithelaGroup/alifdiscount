@@ -1,18 +1,162 @@
 {% extends "base.html" %}
-{% block title %}Contacts · ALIF Discount{% endblock %}
+{% block title %}Contacts{% endblock %}
+
 {% block content %}
-<h2>Contacts</h2>
-<div class="card">
-  {% if items|length == 0 %}
-    <div class="muted">No contacts yet.</div>
-  {% else %}
-    {% for c in items %}
-      <div class="row">
-        <div class="strong">{{ c.full_name or c.name }}</div>
-        <div class="muted">{{ c.mobile }}</div>
-        <div class="muted">{{ c.created_at }}</div>
+
+<section class="section">
+  <div class="row start">
+    <div class="col">
+      <h1 class="h1">📇 Contacts</h1>
+      <p class="muted">Save customer names & numbers to reuse on the Request form.</p>
+    </div>
+    <div class="col right">
+      <button id="btn-open-modal" class="btn btn-primary">➕ New Contact</button>
+    </div>
+  </div>
+
+  <div class="card mt-4">
+    <div class="card-body">
+      {% if total == 0 %}
+        <p class="muted">No contacts yet.</p>
+      {% else %}
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width:80px">SL</th>
+                <th>Full name</th>
+                <th>Mobile</th>
+                <th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for c in rows %}
+              <tr>
+                <td>{{ (page - 1) * page_size + loop.index }}</td>
+                <td>{{ c.full_name }}</td>
+                <td><code>{{ c.mobile }}</code></td>
+                <td>{{ c.remarks or "-" }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="row between mt-3">
+          <div class="col">
+            <span class="muted">Showing page {{ page }} of {{ last_page }} — total {{ total }}</span>
+          </div>
+          <div class="col right">
+            <div class="btn-group">
+              {% set prevp = 1 if page <= 2 else page - 1 %}
+              {% set nextp = last_page if page >= last_page - 1 else page + 1 %}
+              <a class="btn" href="/contacts?page=1">⏮ First</a>
+              <a class="btn" href="/contacts?page={{ prevp }}&page_size={{ page_size }}">◀ Prev</a>
+              <a class="btn" href="/contacts?page={{ nextp }}&page_size={{ page_size }}">Next ▶</a>
+              <a class="btn" href="/contacts?page={{ last_page }}&page_size={{ page_size }}">Last ⏭</a>
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<!-- Modal -->
+<dialog id="modal-contact" class="modal">
+  <form id="form-contact" method="post" action="/contacts/create" class="modal-card" novalidate>
+    <div class="modal-head">
+      <h3>➕ Add Contact</h3>
+      <button type="button" class="btn btn-ghost" id="btn-close-modal">✖</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="form-row">
+        <label for="full_name">Full name</label>
+        <input required id="full_name" name="full_name" type="text" class="input" placeholder="e.g., Md. Rahim" />
       </div>
-    {% endfor %}
-  {% endif %}
-</div>
+
+      <div class="form-row">
+        <label for="mobile">Mobile (🇧🇩 +880)</label>
+        <div class="input-group">
+          <span class="input-group-addon">+880</span>
+          <input required id="mobile_local" type="tel" class="input" inputmode="numeric" pattern="1[0-9]{9}"
+                 placeholder="1XXXXXXXXX" maxlength="10" />
+        </div>
+        <input id="mobile" name="mobile" type="hidden" />
+        <small class="muted">Must be <strong>+8801XXXXXXXXX</strong>. (We’ll build it for you from the box above.)</small>
+      </div>
+
+      <div class="form-row">
+        <label for="remarks">Remarks</label>
+        <textarea id="remarks" name="remarks" class="textarea" rows="2" placeholder="Short note (optional)"></textarea>
+      </div>
+
+      <div id="form-error" class="alert alert-error" style="display:none"></div>
+    </div>
+
+    <div class="modal-foot right">
+      <button type="button" class="btn" id="btn-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<style>
+  .section { max-width: 1100px; margin: 0 auto; }
+  .row { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+  .row.start { justify-content: space-between; }
+  .row.between { justify-content: space-between; }
+  .col.right { margin-left:auto; }
+  .card { background: var(--surface-2); border-radius: 14px; box-shadow: var(--shadow-2); }
+  .card-body { padding: 1rem 1.25rem; }
+  .table-responsive { overflow:auto; }
+  .table { width:100%; border-collapse: collapse; }
+  .table th, .table td { padding:.9rem .8rem; border-bottom: 1px dashed rgba(255,255,255,.06); }
+  .btn-group .btn { margin-left:.3rem; }
+  .modal { border: none; padding: 0; border-radius: 16px; }
+  .modal::backdrop { background: rgba(0,0,0,.45); }
+  .modal-card { width: 520px; max-width: 95vw; }
+  .modal-head, .modal-foot { display:flex; align-items:center; justify-content: space-between; padding: .9rem 1rem; background: var(--surface-2); }
+  .modal-body { padding: 1rem; background: var(--surface-1); }
+  .form-row { margin-bottom: .9rem; display:flex; flex-direction: column; }
+  .input-group { display:flex; }
+  .input-group-addon { background: var(--surface-3); padding:.55rem .7rem; border-top-left-radius:10px; border-bottom-left-radius:10px; border:1px solid rgba(255,255,255,.1); border-right:none; }
+  .input-group .input { border-top-left-radius:0; border-bottom-left-radius:0; }
+  .alert-error { background: #3a2030; color: #ff9bb7; padding:.6rem .8rem; border-radius:10px; }
+</style>
+
+<script>
+(function(){
+  const dlg = document.getElementById('modal-contact');
+  const openBtn = document.getElementById('btn-open-modal');
+  const closeBtn = document.getElementById('btn-close-modal');
+  const cancelBtn = document.getElementById('btn-cancel');
+  const form = document.getElementById('form-contact');
+  const local = document.getElementById('mobile_local');
+  const hidden = document.getElementById('mobile');
+  const err = document.getElementById('form-error');
+
+  function open() { dlg.showModal(); setTimeout(()=>document.getElementById('full_name').focus(), 10); }
+  function close() { dlg.close(); err.style.display='none'; err.textContent=''; form.reset(); }
+
+  openBtn?.addEventListener('click', open);
+  closeBtn?.addEventListener('click', close);
+  cancelBtn?.addEventListener('click', close);
+
+  form.addEventListener('submit', function(e){
+    // compose +880 + local
+    const v = (local.value || '').replace(/[^0-9]/g,'');
+    if (!/^1[0-9]{9}$/.test(v)) {
+      e.preventDefault();
+      err.textContent = 'Enter a 10-digit Bangladesh mobile after +880 (e.g., 1XXXXXXXXX).';
+      err.style.display = 'block';
+      local.focus();
+      return false;
+    }
+    hidden.value = '+880' + v;
+  });
+})();
+</script>
+
 {% endblock %}
