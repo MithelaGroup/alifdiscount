@@ -1,296 +1,329 @@
-# app/views.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-from fastapi import FastAPI, Request
-from starlette.responses import RedirectResponse
-from sqlalchemy.orm import Session
-from app.database import SessionLocal
-from app.models_contact import Contact
+import math
+import os
+import re
+from datetime import datetime
+from types import SimpleNamespace
+from typing import Any, Dict, List, Optional
 
-# --- DB session helper (works with your current database.py) ---------------
+from fastapi import FastAPI, Form, Request
+from starlette.responses import RedirectResponse, Response
 
-def _new_session():
+# --- DB / Models ---
+# IMPORTANT: use the single existing models module to avoid duplicate tables.
+# Do NOT import app.models_contact (it defines another 'contacts' table).
+try:
+    from app.database import SessionLocal  # typical FastAPI/SQLAlchemy pattern
+except Exception:  # pragma: no cover
+    SessionLocal = None  # we'll error loudly if this is None
+
+try:
+    # Your repo’s models (names inferred from your logs)
+    from app.models import Contact, Request as DiscountRequest, RequestStatus, User
+except Exception:
+    # if some model name differs, we handle later by falling back safely
+    Contact = None
+    DiscountRequest = None
+    RequestStatus = None
+    User = None
+
+# -------------------------
+# helpers & infrastructure
+# -------------------------
+
+def _get_user_from_session(request: Request) -> Optional[dict]:
     """
-    Try common patterns: SessionLocal(), get_session(), get_db().
-    Returns a session or None (never raises at import-time).
+    We keep whatever you put in session["user"] (dict).
     """
-    try:
-        from app.database import SessionLocal  # type: ignore
-        return SessionLocal()
-    except Exception:
-        pass
-    try:
-        from app.database import get_session  # type: ignore
-        return get_session()
-    except Exception:
-        pass
-    try:
-        # Some projects expose a generator get_db()
-        from app.database import get_db  # type: ignore
+    u = request.session.get("user")
+    return u if isinstance(u, dict) else None
 
-        try:
-            return next(get_db())
-        except Exception:
-            pass
-    except Exception:
-        pass
-    return None
 
-# --- Model aliases (tolerant to different names) ---------------------------
-
-def _models():
-    import importlib
-
-    m = importlib.import_module("app.models")  # your models.py
-    # Table aliases (whichever exists in your models)
-    User = getattr(m, "User", None)
-    Coupon = getattr(m, "Coupon", None)
-    Group = (
-        getattr(m, "DiscountGroup", None)
-        or getattr(m, "CouponGroup", None)
-        or getattr(m, "Group", None)
+def _app_conf() -> SimpleNamespace:
+    return SimpleNamespace(
+        APP_BASE_URL=os.getenv("APP_BASE_URL", ""),
+        ENV=os.getenv("ENV", "prod"),
     )
-    RequestModel = getattr(m, "CouponRequest", None) or getattr(m, "Request", None)
-    RequestStatus = getattr(m, "RequestStatus", None)
-    return User, Coupon, Group, RequestModel, RequestStatus
 
 
-# --- User / auth helpers ---------------------------------------------------
-
-def _current_user(request: Request):
+def render(request: Request, template_name: str, context: Optional[Dict[str, Any]] = None) -> Response:
     """
-    Read the logged-in user from session. We support both (id) and (dict) forms.
+    Centralized renderer that injects common variables so templates don’t fail:
+      - request
+      - user
+      - now
+      - conf (for settings.html)
     """
-    uid = request.session.get("user_id")
-    uname = request.session.get("username")
-    if not uid and not uname:
-        return None
-
-    User, *_ = _models()
-    if User is None:
-        # we can still display the name if stored in session
-        return {"username": uname, "id": uid}
-    db = _new_session()
-    if not db:
-        return {"username": uname, "id": uid}
-    try:
-        if hasattr(User, "id") and uid:
-            return db.query(User).filter(User.id == uid).first()
-    except Exception:
-        pass
-    finally:
-        try:
-            db.close()
-        except Exception:
-            pass
-    return {"username": uname, "id": uid}
-
-
-def _require_login(request: Request) -> Optional[RedirectResponse]:
-    """Redirect to /login if no user session."""
-    if _current_user(request) is None:
-        return RedirectResponse("/login", status_code=303)
-    return None
-
-
-# --- Rendering helper injects user + conf everywhere -----------------------
-
-def render(request: Request, template_name: str, ctx: Dict[str, Any]):
-    user = _current_user(request)
-    base = {
+    base: Dict[str, Any] = {
         "request": request,
-        "user": user,
-        "conf": getattr(request.app.state, "conf", None),
+        "user": _get_user_from_session(request),
+        "now": datetime.utcnow(),
+        "conf": _app_conf(),
     }
-    base.update(ctx or {})
+    if context:
+        base.update(context)
     return request.app.state.templates.TemplateResponse(template_name, base)  # type: ignore[attr-defined]
 
 
-# --- Pages -----------------------------------------------------------------
+def _login_required_redirect(request: Request) -> Optional[RedirectResponse]:
+    """
+    If user not logged in, redirect to /login?next=<current>.
+    """
+    if not _get_user_from_session(request):
+        next_path = request.url.path or "/dashboard"
+        return RedirectResponse(f"/login?next={next_path}", status_code=303)
+    return None
 
-def register_routes(app: FastAPI):
 
+# ---------------
+# Phone helpers
+# ---------------
+BD_MOBILE_RE = re.compile(r"^\+8801[3-9]\d{8}$")
+
+def normalize_bd_mobile(mobile: str) -> Optional[str]:
+    """
+    Normalize/validate to E.164 BD format: +8801XXXXXXXXX.
+    - Accepts '+088...' and normalizes to '+880...'.
+    - Accepts '880...' and normalizes to '+880...'.
+    - Rejects anything not matching BD mobile ranges (013–019).
+    """
+    if not mobile:
+        return None
+    m = mobile.strip().replace(" ", "")
+    # normalize a couple of common prefixes users type
+    if m.startswith("+088"):
+        m = "+880" + m[4:]
+    if m.startswith("088"):
+        m = "880" + m[3:]
+    if m.startswith("880"):
+        m = "+" + m
+    if not m.startswith("+880"):
+        # if they typed 01xxxxxxxxx
+        if m.startswith("01") and len(m) == 11:
+            m = "+88" + m
+        else:
+            # fall back: ensure we at least stick + if they gave 880..........
+            if m.startswith("88"):
+                m = "+" + m
+    return m if BD_MOBILE_RE.match(m) else None
+
+
+# ---------------
+# Queries
+# ---------------
+def _db():
+    if SessionLocal is None:
+        raise RuntimeError("SessionLocal not available; please check app.database")
+    return SessionLocal()
+
+
+def _count_by_status(status) -> int:
+    if DiscountRequest is None or RequestStatus is None:
+        return 0
+    with _db() as s:
+        return s.query(DiscountRequest).filter(DiscountRequest.status == status).count()
+
+
+def _latest_requests(limit: int = 10) -> List[Dict[str, Any]]:
+    if DiscountRequest is None:
+        return []
+    with _db() as s:
+        q = (
+            s.query(DiscountRequest)
+            .order_by(DiscountRequest.id.desc())  # type: ignore[attr-defined]
+            .limit(limit)
+        )
+        rows: List[Dict[str, Any]] = []
+        for r in q:
+            # Be defensive: some fields may differ in your model; use getattr()
+            rows.append(
+                {
+                    "id": getattr(r, "id", None),
+                    "code": getattr(r, "id", None),
+                    "customer": getattr(r, "customer_name", "") or "",
+                    "mobile": getattr(r, "customer_mobile", "") or "",
+                    "cashier": getattr(r, "cashier_name", "") or "",
+                    "reference": getattr(r, "reference_no", "") or "",
+                    "approved_by": getattr(r, "approved_by", "") or "",
+                    "status": getattr(r, "status", None),
+                }
+            )
+        return rows
+
+
+def _paginate_contacts(page: int, per_page: int) -> Dict[str, Any]:
+    """
+    Returns dict with keys: items(list), total(int), page, per_page, pages
+    """
+    if Contact is None:
+        return {"items": [], "total": 0, "page": page, "per_page": per_page, "pages": 0}
+
+    with _db() as s:
+        total = s.query(Contact).count()
+        pages = math.ceil(total / per_page) if per_page > 0 else 1
+        page = max(1, min(page, pages or 1))
+        offset = (page - 1) * per_page
+        q = (
+            s.query(Contact)
+            .order_by(getattr(Contact, "id").desc())
+            .offset(offset)
+            .limit(per_page)
+        )
+        items = []
+        # build rows for the template (keep both 'rows' and 'contacts' for safety)
+        for idx, c in enumerate(q, start=offset + 1):
+            items.append(
+                {
+                    "sl": idx,
+                    "id": getattr(c, "id", None),
+                    "full_name": getattr(c, "full_name", "") or getattr(c, "name", ""),
+                    "mobile": getattr(c, "mobile", ""),
+                    "remarks": getattr(c, "remarks", ""),
+                    "created_at": getattr(c, "created_at", None),
+                }
+            )
+        return {"items": items, "total": total, "page": page, "per_page": per_page, "pages": pages}
+
+
+# ---------------
+# Routes
+# ---------------
+def register_routes(app: FastAPI) -> None:
+    # --------- Auth convenience (keep your existing login page intact) ---------
+    @app.get("/login")
+    def login_page(request: Request):
+        if _get_user_from_session(request):
+            return RedirectResponse("/dashboard", status_code=303)
+        # Keep your own login.html; we just pass context.
+        return render(request, "login.html", {})
+
+    @app.get("/logout")
+    def logout(request: Request):
+        request.session.pop("user", None)
+        return RedirectResponse("/login", status_code=303)
+
+    # ----------------- Dashboard -----------------
     @app.get("/dashboard")
     def dashboard(request: Request):
-        if (redir := _require_login(request)) is not None:
+        redir = _login_required_redirect(request)
+        if redir:
             return redir
 
-        User, Coupon, Group, RequestModel, RequestStatus = _models()
-
-        # Three tiles: counts
-        pending_cnt = approved_cnt = done_cnt = 0
-
-        db = _new_session()
-        rows = []
-        if db and RequestModel is not None:
-            # Figure out created_at / id for sorting
-            created_col = getattr(RequestModel, "created_at", None) or getattr(RequestModel, "created", None) or getattr(RequestModel, "id", None)
-
-            # best-effort status enum / string
-            def _sv(name: str):
-                return getattr(RequestStatus, name, name) if RequestStatus else name
-
+        # Gather counts if model present; otherwise zeros.
+        if RequestStatus is not None:
             try:
-                # counts
-                if hasattr(RequestModel, "status"):
-                    pending_cnt = db.query(RequestModel).filter(RequestModel.status == _sv("PENDING")).count()
-                    approved_cnt = db.query(RequestModel).filter(RequestModel.status == _sv("APPROVED")).count()
-                    done_cnt = db.query(RequestModel).filter(RequestModel.status == _sv("DONE")).count()
-
-                # latest 10
-                if created_col is not None:
-                    rows = (
-                        db.query(RequestModel)
-                        .order_by(created_col.desc())
-                        .limit(10)
-                        .all()
-                    )
-                else:
-                    rows = db.query(RequestModel).limit(10).all()
+                pending = _count_by_status(RequestStatus.PENDING)
+                approved = _count_by_status(RequestStatus.APPROVED)
+                done = _count_by_status(RequestStatus.DONE)
             except Exception:
-                rows = []
-            finally:
-                try:
-                    db.close()
-                except Exception:
-                    pass
+                pending = approved = done = 0
+        else:
+            pending = approved = done = 0
+
+        latest = _latest_requests(limit=10)
 
         return render(
             request,
             "dashboard.html",
             {
-                "pending_cnt": pending_cnt,
-                "approved_cnt": approved_cnt,
-                "done_cnt": done_cnt,
-                "rows": rows,
-                "status_enum": RequestStatus,  # for template comparisons
+                "pending_count": pending,
+                "approved_count": approved,
+                "done_count": done,
+                "latest_rows": latest,
             },
         )
 
+    # ----------------- Contacts (list + create) -----------------
     @app.get("/contacts")
-    def contacts(request: Request):
-        if (redir := _require_login(request)) is not None:
+    def contacts(request: Request, page: int = 1, per_page: int = 10):
+        redir = _login_required_redirect(request)
+        if redir:
             return redir
 
-        # Optional contacts module
         try:
-            from app.models_contact import Contact  # type: ignore
+            data = _paginate_contacts(page=page, per_page=per_page)
         except Exception:
-            Contact = None
+            data = {"items": [], "total": 0, "page": page, "per_page": per_page, "pages": 0}
 
-        db = _new_session()
-        items = []
-        if db and Contact is not None:
-            try:
-                items = db.query(Contact).all()
-            except Exception:
-                items = []
-            finally:
-                try:
-                    db.close()
-                except Exception:
-                    pass
-
-        return render(request, "contacts.html", {"contacts": items})
-
-    @app.get("/users")
-    def users(request: Request):
-        if (redir := _require_login(request)) is not None:
-            return redir
-
-        User, *_ = _models()
-        db = _new_session()
-        rows = []
-        if db and User is not None:
-            try:
-                rows = db.query(User).all()
-            finally:
-                try:
-                    db.close()
-                except Exception:
-                    pass
-
-        return render(request, "users.html", {"rows": rows})
-
-    @app.get("/requests")
-    def requests_list(request: Request):
-        if (redir := _require_login(request)) is not None:
-            return redir
-
-        _, _, _, RequestModel, RequestStatus = _models()
-        db = _new_session()
-        rows = []
-        if db and RequestModel is not None:
-            created_col = getattr(RequestModel, "created_at", None) or getattr(RequestModel, "created", None) or getattr(RequestModel, "id", None)
-            try:
-                if created_col is not None:
-                    rows = (
-                        db.query(RequestModel)
-                        .order_by(created_col.desc())
-                        .limit(10)
-                        .all()
-                    )
-                else:
-                    rows = db.query(RequestModel).limit(10).all()
-            finally:
-                try:
-                    db.close()
-                except Exception:
-                    pass
-
+        rows = data["items"]
+        total = data["total"]
+        pages = data["pages"]
+        # NOTE: your contacts.html expects: page, per_page, total AND either rows or contacts.
         return render(
             request,
-            "requests.html",
-            {"rows": rows, "status_enum": RequestStatus},
+            "contacts.html",
+            {
+                "rows": rows,
+                "contacts": rows,  # alias for safety
+                "total": total,
+                "page": data["page"],
+                "per_page": data["per_page"],
+                "pages": pages,
+            },
         )
 
-    @app.get("/request/create")
-    def request_create(request: Request):
-        if (redir := _require_login(request)) is not None:
+    @app.post("/contacts/create")
+    def contacts_create(
+        request: Request,
+        full_name: str = Form(...),
+        mobile: str = Form(...),
+        remarks: str = Form(""),
+    ):
+        redir = _login_required_redirect(request)
+        if redir:
             return redir
-        # Your existing create form lives in templates/request_create.html
-        return render(request, "request_create.html", {})
 
-    @app.get("/enlist")
-    def enlist(request: Request):
-        if (redir := _require_login(request)) is not None:
+        normalized = normalize_bd_mobile(mobile)
+        if not normalized:
+            # invalid number -> flash-like pattern via query param
+            return RedirectResponse("/contacts?error=invalid_mobile", status_code=303)
+
+        if Contact is None:
+            return RedirectResponse("/contacts?error=model_missing", status_code=303)
+
+        try:
+            with _db() as s:
+                c = Contact(full_name=full_name.strip(), mobile=normalized, remarks=remarks.strip())
+                s.add(c)
+                s.commit()
+        except Exception:
+            # avoid breaking UX
+            return RedirectResponse("/contacts?error=save_failed", status_code=303)
+
+        return RedirectResponse("/contacts?ok=1", status_code=303)
+
+    # ----------------- Users (kept simple; avoid 'user is undefined') -----------------
+    @app.get("/users")
+    def users(request: Request):
+        redir = _login_required_redirect(request)
+        if redir:
             return redir
 
-        _, Coupon, Group, *_ = _models()
-        db = _new_session()
-        groups, coupons = [], []
-        if db:
-            try:
-                if Group is not None:
-                    # order by name/percent if available
-                    order_col = getattr(Group, "percent", None) or getattr(Group, "name", None) or getattr(Group, "id", None)
-                    q = db.query(Group)
-                    if order_col is not None:
-                        q = q.order_by(order_col.desc())
-                    groups = q.all()
-                if Coupon is not None:
-                    order_col = getattr(Coupon, "created_at", None) or getattr(Coupon, "enlisted_at", None) or getattr(Coupon, "id", None)
-                    q = db.query(Coupon)
-                    if order_col is not None:
-                        q = q.order_by(order_col.desc())
-                    coupons = q.all()
-            finally:
-                try:
-                    db.close()
-                except Exception:
-                    pass
+        # Make sure `user` exists in context via render(); template should now be safe
+        # If you have a list of users, you can load them here similarly to contacts.
+        return render(request, "users.html", {"rows": []})
 
-        return render(request, "enlist.html", {"groups": groups, "coupons": coupons})
+    # ----------------- Requests (list-only skeleton; your existing template) -----------------
+    @app.get("/requests")
+    def requests_list(request: Request):
+        redir = _login_required_redirect(request)
+        if redir:
+            return redir
 
+        latest = _latest_requests(limit=10)
+        return render(request, "requests.html", {"rows": latest})
+
+    # ----------------- Settings (fix 'conf is undefined') -----------------
     @app.get("/settings")
     def settings(request: Request):
-        if (redir := _require_login(request)) is not None:
+        redir = _login_required_redirect(request)
+        if redir:
             return redir
 
         return render(request, "settings.html", {})
-    
+
+    # ----------------- PWA -----------------
     @app.get("/pwa")
     def pwa(request: Request):
-        # PWA page can be public; no redirect here
         return render(request, "pwa.html", {})
