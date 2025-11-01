@@ -1,9 +1,12 @@
 import os
+from datetime import datetime
+
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.staticfiles import StaticFiles
 from starlette.responses import RedirectResponse
 from starlette.templating import Jinja2Templates
+
 
 # --- App bootstrap ---
 app = FastAPI(title="ALIF Discount")
@@ -24,12 +27,18 @@ templates_dir = os.path.join(os.path.dirname(__file__), "..", "templates")
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 templates = Jinja2Templates(directory=templates_dir)
+
+# IMPORTANT: expose a callable now() to Jinja so {{ now().year }} works.
+templates.env.globals["now"] = datetime.utcnow
+
 app.state.templates = templates  # used by render() in views.py
+
 
 # Root redirect
 @app.get("/")
 def root():
     return RedirectResponse("/dashboard", status_code=303)
+
 
 # Register app routes
 from app import views  # noqa: E402
