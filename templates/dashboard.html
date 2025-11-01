@@ -1,32 +1,38 @@
 {% extends "base.html" %}
-
 {% block content %}
   <h2>Dashboard</h2>
 
-  <div class="tiles-3" style="margin:1rem 0 2rem;">
-    <section class="tile">
-      <h3 style="margin:0 0 .4rem;">Pending</h3>
-      <div class="count">{{ counts.pending if counts else 0 }}</div>
-      <p class="muted" style="margin-top:.6rem;">No pending requests.</p>
-    </section>
+  <!-- Three tiles side-by-side -->
+  <section class="tiles">
+    <div class="tile">
+      <h3>Pending</h3>
+      <div class="chip">{{ pending_cnt or 0 }}</div>
+      {% if (pending_cnt or 0) == 0 %}
+        <p class="muted">No pending requests.</p>
+      {% endif %}
+    </div>
 
-    <section class="tile">
-      <h3 style="margin:0 0 .4rem;">Approved</h3>
-      <div class="count">{{ counts.approved if counts else 0 }}</div>
-      <p class="muted" style="margin-top:.6rem;">No approved requests.</p>
-    </section>
+    <div class="tile">
+      <h3>Approved</h3>
+      <div class="chip">{{ approved_cnt or 0 }}</div>
+      {% if (approved_cnt or 0) == 0 %}
+        <p class="muted">No approved requests.</p>
+      {% endif %}
+    </div>
 
-    <section class="tile">
-      <h3 style="margin:0 0 .4rem;">Done</h3>
-      <div class="count">{{ counts.done if counts else 0 }}</div>
-      <p class="muted" style="margin-top:.6rem;">No completed items.</p>
-    </section>
-  </div>
+    <div class="tile">
+      <h3>Done</h3>
+      <div class="chip">{{ done_cnt or 0 }}</div>
+      {% if (done_cnt or 0) == 0 %}
+        <p class="muted">No completed items.</p>
+      {% endif %}
+    </div>
+  </section>
 
   <h3>Latest Requests</h3>
   <p class="muted">max 10 per page</p>
 
-  <div class="tile" style="padding:0;">
+  <div class="tile" style="padding:0">
     <table>
       <thead>
         <tr>
@@ -36,38 +42,38 @@
           <th>Reference of</th>
           <th>Approved by</th>
           <th>Status</th>
-          <th style="text-align:right;">Actions</th>
+          <th style="width:120px;">Actions</th>
         </tr>
       </thead>
       <tbody>
-        {% if latest_requests and latest_requests|length > 0 %}
-          {% for r in latest_requests %}
-            <tr>
-              <td>{{ r.code or r.id }}</td>
-              <td>
-                {% if r.customer_name %}{{ r.customer_name }}{% endif %}
-                {% if r.customer_phone %}<br><span class="muted">{{ r.customer_phone }}</span>{% endif %}
-              </td>
-              <td>{{ r.cashier_name or (r.created_by_name if r.created_by_name else "") }}</td>
-              <td>{{ r.reference_name or "" }}</td>
-              <td>{{ r.approved_by_name or "" }}</td>
-              <td>
-                {% if r.status == "requested" %}Requested{% elif r.status == "approved" %}Approved{% elif r.status == "completed" %}Completed{% elif r.status == "rejected" %}Rejected{% else %}{{ r.status }}{% endif %}
-              </td>
-              <td style="text-align:right;">
-                <!-- placeholder buttons (wire to your POST endpoints) -->
-                {% if r.status == "requested" %}
-                  <a class="btn" href="/requests/approve?id={{ r.id }}">Approve</a>
-                  <a class="btn" href="/requests/reject?id={{ r.id }}">Reject</a>
-                {% elif r.status == "approved" %}
-                  <a class="btn" href="/requests/finalize?id={{ r.id }}">Finalize</a>
-                {% endif %}
-                <a class="btn" href="/requests/preview?id={{ r.id }}">Preview</a>
-              </td>
-            </tr>
-          {% endfor %}
+        {% if not rows or rows|length == 0 %}
+          <tr><td colspan="7" class="muted" style="padding:16px 14px">No requests yet.</td></tr>
         {% else %}
-          <tr><td colspan="7" class="muted">No requests yet.</td></tr>
+          {% for r in rows %}
+          <tr>
+            <td>{{ r.code if r.code is defined else r.id }}</td>
+            <td>
+              {{ (r.customer_name if r.customer_name is defined) or "" }}
+              {% if r.customer_mobile is defined and r.customer_mobile %}
+                <div class="muted">+{{ r.customer_mobile }}</div>
+              {% endif %}
+            </td>
+            <td>{{ r.created_by.full_name if r.created_by is defined and r.created_by else (r.cashier_name if r.cashier_name is defined else "") }}</td>
+            <td>{{ r.reference_person.full_name if r.reference_person is defined and r.reference_person else (r.reference_name if r.reference_name is defined else "") }}</td>
+            <td>{{ r.approved_by.full_name if r.approved_by is defined and r.approved_by else "" }}</td>
+            <td>
+              {% set s = r.status %}
+              {% if status_enum %}
+                {{ s.name if s and s.name is defined else s }}
+              {% else %}
+                {{ s }}
+              {% endif %}
+            </td>
+            <td>
+              <a class="btn" href="/requests/{{ r.id }}/preview">Preview</a>
+            </td>
+          </tr>
+          {% endfor %}
         {% endif %}
       </tbody>
     </table>
