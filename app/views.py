@@ -1,325 +1,323 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import RedirectResponse
-from sqlalchemy import asc, desc, func, select
-from sqlalchemy.orm import Session
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import func, or_
+from sqlalchemy.orm import joinedload, Session
 
-# --- database session dependency ------------------------------------------------
-try:
-    # your project has app.database with SessionLocal/get_db in the repo
-    from app.database import get_db  # type: ignore
-except Exception:  # pragma: no cover
-    def get_db():  # very small fallback; you should never hit this
-        raise RuntimeError("get_db not found; please keep app/database.py as in repo")
+from app.database import get_session  # must return a SQLAlchemy Session
+from app.config import settings
+from app.models import (
+    User,
+    Contact,
+    Coupon,
+    CouponGroup,        # your repo has groups for percentages
+    CouponRequest,      # requests table
+)
 
-# --- models (import defensively, names sometimes moved across files) ------------
-# Users
-try:
-    from app.models import User  # type: ignore
-except Exception:
-    User = None  # type: ignore
-
-# Contacts
-try:
-    from app.models_contact import Contact  # type: ignore
-except Exception:
-    try:
-        from app.models import Contact  # type: ignore
-    except Exception:
-        Contact = None  # type: ignore
-
-# Coupons, groups, requests
-DiscountGroup = None
-Coupon = None
-CouponRequest = None
-RequestStatus = None
-
-try:
-    from app.models import DiscountGroup as _DG  # type: ignore
-    DiscountGroup = _DG
-except Exception:
-    try:
-        from app.models import CouponGroup as _DG  # type: ignore
-        DiscountGroup = _DG
-    except Exception:
-        pass
-
-try:
-    from app.models import Coupon as _CP  # type: ignore
-    Coupon = _CP
-except Exception:
-    pass
-
-try:
-    from app.models import CouponRequest as _CR  # type: ignore
-    CouponRequest = _CR
-except Exception:
-    pass
-
-try:
-    from app.models import RequestStatus as _RS  # type: ignore
-    RequestStatus = _RS
-except Exception:
-    # final fallback
-    class _RSF:  # pragma: no cover
-        PENDING = "PENDING"
-        APPROVED = "APPROVED"
-        DONE = "DONE"
-        REJECTED = "REJECTED"
-    RequestStatus = _RSF  # type: ignore
-
-
-router = APIRouter()
-
-
-# ------------------------------------------------------------------------------
-# helpers
-# ------------------------------------------------------------------------------
+# ----------------------------
+# Helpers
+# ----------------------------
 
 def render(request: Request, template_name: str, context: Dict[str, Any]):
-    ctx = {"request": request, **context}
-    return request.app.state.templates.TemplateResponse(template_name, ctx)  # type: ignore[attr-defined]
+    """
+    Centralized renderer so we always pass the same baseline context to Jinja.
+    """
+    tmpl = request.app.state.templates  # set in main.py
+    base_ctx = {
+        "request": request,
+        "conf": settings,                     # your templates use {{ conf.* }}
+        "user": current_user(request),        # your templates often reference {{ user }}
+    }
+    base_ctx.update(context)
+    return tmpl.TemplateResponse(template_name, base_ctx)
 
 
-def safe(obj: Any, attr: str, default: Any = None):
-    try:
-        return getattr(obj, attr)
-    except Exception:
-        return default
+def current_user(request: Request) -> Optional[User]:
+    """
+    Pulls the logged-in user from the session.
+    """
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return None
+    with get_session() as db:
+        return db.query(User).get(user_id)
 
 
-def safe_name(user: Any) -> str:
+def login_required(request: Request) -> User:
+    user = current_user(request)
     if not user:
-        return ""
-    return safe(user, "full_name", None) or safe(user, "username", None) or safe(user, "email", "") or ""
+        # send to login if not authenticated
+        raise HTTPException(status_code=307, detail="redirect", headers={"Location": "/login"})
+    return user
 
 
-def as_request_row(r: Any) -> Dict[str, Any]:
-    """Flatten a CouponRequest to a dict the templates can use safely."""
-    ref_user = safe(r, "reference_user")
-    cashier = safe(r, "cashier")
-    approver = safe(r, "approved_by") or safe(r, "approver") or safe(r, "approved_by_user")
-    coupon = safe(r, "assigned_coupon")
-
-    return {
-        "id": safe(r, "id"),
-        "request_code": safe(r, "request_code") or safe(r, "code"),
-        "customer_name": safe(r, "customer_name") or safe(r, "customer_full_name") or "",
-        "customer_mobile": safe(r, "customer_mobile") or safe(r, "mobile") or "",
-        "status": safe(r, "status"),
-        "discount_percent": safe(r, "discount_percent"),
-        "invoice_number": safe(r, "invoice_number"),
-        "discount_amount": safe(r, "discount_amount"),
-        "reference_name": safe_name(ref_user),
-        "cashier_name": safe_name(cashier),
-        "approved_by_name": safe_name(approver),
-        "coupon_code": safe(coupon, "code"),
-        "created_at": safe(r, "created_at"),
-    }
-
-
-def paginate_query(query, page: int, per_page: int):
-    return query.limit(per_page).offset((page - 1) * per_page)
-
-
-# ------------------------------------------------------------------------------
-# routes
-# ------------------------------------------------------------------------------
-
-@router.get("/")
-def home() -> RedirectResponse:
-    return RedirectResponse(url="/dashboard", status_code=307)
-
-
-@router.get("/dashboard")
-def dashboard(request: Request, db: Session = Depends(get_db)):
+def safe(obj: Any, *candidates: str, default: Any = None):
     """
-    Renders the 3 tiles (pending/approved/done) and the table of latest 10 requests.
-    Works even if some relationships are missing – we won't eager load attributes
-    that error'd in your logs (e.g. `CouponRequest.approved_by`).
+    Try several attribute names and return the first existing non-empty one.
     """
-    if not CouponRequest:
-        return render(request, "message.html", {"title": "Setup error", "message": "CouponRequest model not found."})
-
-    # counts + small lists for the tiles
-    def qstatus(status_value):
-        return select(CouponRequest).where(CouponRequest.status == status_value).order_by(desc(CouponRequest.created_at))  # type: ignore
-
-    pending = [as_request_row(r) for r in db.execute(paginate_query(qstatus(RequestStatus.PENDING), 1, 5)).scalars().all()]  # type: ignore
-    approved = [as_request_row(r) for r in db.execute(paginate_query(qstatus(RequestStatus.APPROVED), 1, 5)).scalars().all()]  # type: ignore
-    done = [as_request_row(r) for r in db.execute(paginate_query(qstatus(RequestStatus.DONE), 1, 5)).scalars().all()]  # type: ignore
-
-    def count(status_value) -> int:
-        return db.scalar(select(func.count()).select_from(CouponRequest).where(CouponRequest.status == status_value)) or 0  # type: ignore
-
-    # latest 10 for table
-    latest = [as_request_row(r) for r in db.execute(
-        select(CouponRequest).order_by(desc(CouponRequest.created_at)).limit(10)  # type: ignore
-    ).scalars().all()]
-
-    ctx = {
-        "pending": pending,
-        "approved": approved,
-        "done": done,
-        "count_pending": count(RequestStatus.PENDING),
-        "count_approved": count(RequestStatus.APPROVED),
-        "count_done": count(RequestStatus.DONE),
-        "latest": latest,
-    }
-    return render(request, "dashboard.html", ctx)
+    for name in candidates:
+        val = getattr(obj, name, None)
+        if val not in (None, ""):
+            return val
+    return default
 
 
-@router.get("/requests")
-def requests_list(request: Request, page: int = 1, per: int = 10, db: Session = Depends(get_db)):
-    if not CouponRequest:
-        return render(request, "message.html", {"title": "Setup error", "message": "CouponRequest model not found."})
+# ----------------------------
+# Dashboard + Requests
+# ----------------------------
 
-    page = max(1, page)
-    per = max(1, min(per, 50))
+def _query_latest_requests(db: Session, limit: int = 10) -> List[CouponRequest]:
+    """
+    Load latest coupon requests with relations (without assuming exact relationship names).
+    """
+    q = (
+        db.query(CouponRequest)
+        .options(
+            joinedload(getattr(CouponRequest, "contact", None)),
+            joinedload(getattr(CouponRequest, "assigned_coupon", None)),
+            joinedload(getattr(CouponRequest, "created_by", None)),
+            joinedload(getattr(CouponRequest, "reference_user", None)),
+            joinedload(getattr(CouponRequest, "approved_by", None)),
+        )
+        .order_by(CouponRequest.created_at.desc())
+        .limit(limit)
+    )
+    return list(q)
 
-    base_q = select(CouponRequest).order_by(desc(CouponRequest.created_at))  # type: ignore
-    rows = [as_request_row(r) for r in db.execute(paginate_query(base_q, page, per)).scalars().all()]
-    total = db.scalar(select(func.count()).select_from(CouponRequest)) or 0  # type: ignore
-    has_next = (page * per) < total
-    has_prev = page > 1
 
-    return render(
-        request,
-        "requests.html",
-        {"rows": rows, "page": page, "per": per, "has_next": has_next, "has_prev": has_prev, "total": total},
+@dataclass
+class RequestRow:
+    id: int
+    code: str
+    status: str
+    created_at: datetime
+    customer_name: str
+    customer_mobile: str
+    cashier_name: str
+    reference_name: str
+    approved_by_name: str
+    discount_percent: Optional[int]
+    invoice_number: Optional[str]
+    assigned_coupon_code: Optional[str]
+
+
+def _row_from_request(r: CouponRequest) -> RequestRow:
+    contact = safe(r, "contact")
+    created_by = safe(r, "created_by", "cashier", "creator")
+    approved_by = safe(r, "approved_by", "approver")
+    reference_user = safe(r, "reference_user", "reference_by", "ref_user")
+    assigned_coupon = safe(r, "assigned_coupon", "coupon")
+
+    return RequestRow(
+        id=int(safe(r, "id", default=0)),
+        code=str(safe(r, "request_code", "code", default="")).strip(),
+        status=str(safe(r, "status", default="PENDING")),
+        created_at=safe(r, "created_at", default=datetime.utcnow()),
+        customer_name=str(
+            safe(r, "customer_name", default="")
+            or safe(contact, "full_name", "name", default="")
+        ),
+        customer_mobile=str(
+            safe(r, "customer_mobile", default="")
+            or safe(contact, "mobile", "mobile_bd", default="")
+        ),
+        cashier_name=str(safe(created_by, "username", "name", default="")).strip(),
+        reference_name=str(safe(reference_user, "username", "name", default="")).strip(),
+        approved_by_name=str(safe(approved_by, "username", "name", default="")).strip(),
+        discount_percent=safe(r, "discount_percent", default=None),
+        invoice_number=safe(r, "invoice_number", default=None),
+        assigned_coupon_code=safe(assigned_coupon, "code", default=None),
     )
 
 
-@router.post("/requests/{rid}/approve")
-def request_approve(
-    request: Request,
-    rid: int,
-    group_id: int = Form(...),
-    db: Session = Depends(get_db),
-):
+def _status_counts(db: Session) -> Tuple[int, int, int]:
     """
-    Approve: choose a discount group, auto-pick one available coupon,
-    mark request APPROVED, set discount_percent from group, set 'approved_by' if such field exists.
+    Return counts for PENDING, APPROVED, DONE without assuming an enum type.
     """
-    if not (CouponRequest and Coupon and DiscountGroup):
-        return render(request, "message.html", {"title": "Setup error", "message": "Models missing in server."})
+    rows = (
+        db.query(CouponRequest.status, func.count(CouponRequest.id))
+        .group_by(CouponRequest.status)
+        .all()
+    )
+    by_status = {str(k): int(v) for k, v in rows}
+    return (
+        by_status.get("PENDING", 0),
+        by_status.get("APPROVED", 0),
+        by_status.get("DONE", 0),
+    )
 
-    req = db.get(CouponRequest, rid)  # type: ignore
-    if not req:
-        return render(request, "message.html", {"title": "Not found", "message": "Request not found."})
 
-    group = db.get(DiscountGroup, group_id)  # type: ignore
-    if not group:
-        return render(request, "message.html", {"title": "Not found", "message": "Discount group not found."})
+# ----------------------------
+# Route registration
+# ----------------------------
 
-    # pick one unassigned coupon in this group
-    coupon = db.execute(
-        select(Coupon).where((Coupon.group_id == group.id) & (Coupon.request_id.is_(None)))  # type: ignore
-        .order_by(asc(Coupon.id))  # type: ignore
-        .limit(1)
-    ).scalars().first()
+def register_routes(app: FastAPI):
+    # Dashboard
+    @app.get("/dashboard", response_class=HTMLResponse)
+    def dashboard(request: Request):
+        user = login_required(request)  # will 307 to /login if not authenticated
 
-    if not coupon:
+        with get_session() as db:
+            pending, approved, done = _status_counts(db)
+            latest = [_row_from_request(r) for r in _query_latest_requests(db, limit=10)]
+
         return render(
-            request, "message.html",
-            {"title": "No stock", "message": f"No available coupon in '{getattr(group, 'name', 'group')}'."},
+            request,
+            "dashboard.html",
+            {
+                "title": "Dashboard",
+                "pending_count": pending,
+                "approved_count": approved,
+                "done_count": done,
+                "latest": [asdict(x) for x in latest],
+            },
         )
 
-    # attach coupon and mark approved
-    setattr(req, "status", RequestStatus.APPROVED)
-    setattr(req, "discount_percent", getattr(group, "percent", None) or getattr(group, "percentage", None))
-    setattr(req, "assigned_coupon", coupon)
-    setattr(coupon, "request_id", getattr(req, "id", None))  # be robust if backref missing
+    # Requests list (paginated; page query param optional)
+    @app.get("/requests", response_class=HTMLResponse)
+    def requests_list(request: Request, page: int = 1, per_page: int = 10):
+        user = login_required(request)
+        page = max(1, page)
+        offset = (page - 1) * per_page
 
-    # set approved_by if field exists on model/session
-    session_user = request.session.get("user") if hasattr(request, "session") else None
-    approver_id = (session_user or {}).get("id") if isinstance(session_user, dict) else None
-    for field in ("approved_by_id", "approver_id"):
-        if hasattr(req, field) and approver_id:
-            setattr(req, field, approver_id)
+        with get_session() as db:
+            q = (
+                db.query(CouponRequest)
+                .options(
+                    joinedload(getattr(CouponRequest, "contact", None)),
+                    joinedload(getattr(CouponRequest, "assigned_coupon", None)),
+                    joinedload(getattr(CouponRequest, "created_by", None)),
+                    joinedload(getattr(CouponRequest, "reference_user", None)),
+                    joinedload(getattr(CouponRequest, "approved_by", None)),
+                )
+                .order_by(CouponRequest.created_at.desc())
+            )
+            total = q.count()
+            items = [_row_from_request(r) for r in q.offset(offset).limit(per_page)]
+            has_prev = page > 1
+            has_next = offset + per_page < total
 
-    db.commit()
-    return RedirectResponse(url="/requests", status_code=303)
+        return render(
+            request,
+            "requests.html",
+            {
+                "title": "Requests",
+                "rows": [asdict(x) for x in items],
+                "page": page,
+                "has_prev": has_prev,
+                "has_next": has_next,
+                "total": total,
+            },
+        )
 
+    # Approve/reject/done actions — keep endpoints so buttons don’t 404.
+    @app.post("/requests/{rid}/approve")
+    def approve_request(request: Request, rid: int, group_id: int):
+        user = login_required(request)
+        with get_session() as db:
+            req = db.query(CouponRequest).get(rid)
+            if not req:
+                raise HTTPException(status_code=404, detail="Request not found")
 
-@router.post("/requests/{rid}/reject")
-def request_reject(request: Request, rid: int, db: Session = Depends(get_db)):
-    if not CouponRequest:
-        return render(request, "message.html", {"title": "Setup error", "message": "CouponRequest model not found."})
+            group = db.query(CouponGroup).get(group_id)
+            if not group:
+                raise HTTPException(status_code=400, detail="Invalid group")
 
-    req = db.get(CouponRequest, rid)  # type: ignore
-    if not req:
-        return render(request, "message.html", {"title": "Not found", "message": "Request not found."})
+            # assign an unused coupon from this group
+            coupon = (
+                db.query(Coupon)
+                .filter(
+                    Coupon.group_id == group.id,
+                    or_(Coupon.is_assigned == False, Coupon.is_assigned.is_(None)),  # noqa
+                )
+                .order_by(Coupon.id.asc())
+                .first()
+            )
+            if not coupon:
+                raise HTTPException(status_code=400, detail="No coupon available in this group")
 
-    setattr(req, "status", RequestStatus.REJECTED)
-    db.commit()
-    return RedirectResponse(url="/requests", status_code=303)
+            # update request
+            setattr(req, "status", "APPROVED")
+            setattr(req, "discount_percent", getattr(group, "percent", None))
+            setattr(req, "assigned_coupon_id", getattr(coupon, "id", None))
+            setattr(req, "approved_by_id", getattr(user, "id", None))
+            setattr(coupon, "is_assigned", True)
 
+            db.commit()
 
-@router.post("/requests/{rid}/done")
-def request_done(
-    request: Request,
-    rid: int,
-    invoice_number: str = Form(...),
-    discount_amount: Optional[float] = Form(None),
-    db: Session = Depends(get_db),
-):
-    if not CouponRequest:
-        return render(request, "message.html", {"title": "Setup error", "message": "CouponRequest model not found."})
+        return RedirectResponse(url="/requests", status_code=303)
 
-    req = db.get(CouponRequest, rid)  # type: ignore
-    if not req:
-        return render(request, "message.html", {"title": "Not found", "message": "Request not found."})
+    @app.post("/requests/{rid}/reject")
+    def reject_request(request: Request, rid: int):
+        user = login_required(request)
+        with get_session() as db:
+            req = db.query(CouponRequest).get(rid)
+            if not req:
+                raise HTTPException(status_code=404, detail="Request not found")
+            setattr(req, "status", "REJECTED")
+            setattr(req, "approved_by_id", getattr(user, "id", None))
+            db.commit()
+        return RedirectResponse(url="/requests", status_code=303)
 
-    setattr(req, "invoice_number", invoice_number)
-    if discount_amount is not None:
-        try:
-            setattr(req, "discount_amount", float(discount_amount))
-        except Exception:
-            pass
-    setattr(req, "status", RequestStatus.DONE)
-    db.commit()
-    return RedirectResponse(url="/requests", status_code=303)
+    @app.post("/requests/{rid}/done")
+    def finalize_request(request: Request, rid: int, invoice: str, discount_amount: Optional[int] = None):
+        user = login_required(request)
+        with get_session() as db:
+            req = db.query(CouponRequest).get(rid)
+            if not req:
+                raise HTTPException(status_code=404, detail="Request not found")
+            setattr(req, "invoice_number", invoice)
+            setattr(req, "status", "DONE")
+            if discount_amount is not None:
+                setattr(req, "discount_amount", discount_amount)
+            db.commit()
+        return RedirectResponse(url="/requests", status_code=303)
 
+    # Contacts
+    @app.get("/contacts", response_class=HTMLResponse)
+    def contacts_page(request: Request):
+        user = login_required(request)
+        with get_session() as db:
+            contacts = (
+                db.query(Contact).order_by(func.lower(Contact.full_name).asc(), Contact.id.asc()).all()
+            )
+        return render(
+            request,
+            "contacts.html",
+            {"title": "Contacts", "contacts": contacts},
+        )
 
-# --- simple pages so routes exist and render -----------------------------------
+    # Users
+    @app.get("/users", response_class=HTMLResponse)
+    def users_page(request: Request):
+        user = login_required(request)
+        with get_session() as db:
+            users = db.query(User).order_by(func.lower(User.username).asc()).all()
+        return render(
+            request,
+            "users.html",
+            {"title": "Users", "users": users},
+        )
 
-@router.get("/contacts")
-def contacts_page(request: Request, db: Session = Depends(get_db)):
-    rows = []
-    if Contact:
-        rows = db.execute(select(Contact).order_by(asc(Contact.full_name))).scalars().all()  # type: ignore
-    return render(request, "contacts.html", {"contacts": rows})
-
-
-@router.get("/enlist")
-def coupons_page(request: Request, db: Session = Depends(get_db)):
-    groups, coupons = [], []
-    if DiscountGroup:
-        groups = db.execute(select(DiscountGroup).order_by(asc(DiscountGroup.name))).scalars().all()  # type: ignore
-    if Coupon:
-        coupons = db.execute(select(Coupon).order_by(asc(Coupon.id))).scalars().all()  # type: ignore
-    return render(request, "coupons.html", {"groups": groups, "coupons": coupons})
-
-
-@router.get("/users")
-def users_page(request: Request, db: Session = Depends(get_db)):
-    users = []
-    if User:
-        users = db.execute(select(User).order_by(asc(User.id))).scalars().all()  # type: ignore
-    return render(request, "users.html", {"users": users})
-
-
-@router.get("/settings")
-def settings_page(request: Request):
-    return render(request, "settings.html", {})
-
-
-# Optional: simple PWA helper page (your static SW still handles most)
-@router.get("/pwa")
-def pwa_page(request: Request):
-    return render(request, "placeholder.html", {"title": "PWA", "message": "PWA is enabled."})
+    # Enlist coupons (groups + codes)
+    @app.get("/enlist", response_class=HTMLResponse)
+    def enlist_page(request: Request):
+        user = login_required(request)
+        with get_session() as db:
+            groups = db.query(CouponGroup).order_by(CouponGroup.percent.asc()).all()
+            coupons = (
+                db.query(Coupon)
+                .options(joinedload(Coupon.group), joinedload(getattr(Coupon, "assigned_to", None)))
+                .order_by(Coupon.id.asc())
+                .all()
+            )
+        return render(
+            request,
+            "coupon_enlist.html",  # use your existing template name
+            {"title": "Enlist Coupon", "groups": groups, "coupons": coupons},
+        )
