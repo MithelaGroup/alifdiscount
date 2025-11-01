@@ -52,13 +52,12 @@ def render(request: Request, template_name: str, context: Optional[Dict[str, Any
     Centralized renderer that injects common variables so templates don’t fail:
       - request
       - user
-      - now
       - conf (for settings.html)
+    NOTE: DO NOT inject a 'now' value here—Jinja global 'now()' is registered in main.py.
     """
     base: Dict[str, Any] = {
         "request": request,
         "user": _get_user_from_session(request),
-        "now": datetime.utcnow(),
         "conf": _app_conf(),
     }
     if context:
@@ -86,12 +85,11 @@ def normalize_bd_mobile(mobile: str) -> Optional[str]:
     Normalize/validate to E.164 BD format: +8801XXXXXXXXX.
     - Accepts '+088...' and normalizes to '+880...'.
     - Accepts '880...' and normalizes to '+880...'.
-    - Rejects anything not matching BD mobile ranges (013–019).
+    - Accepts '01XXXXXXXXX' and normalizes to '+8801XXXXXXXXX'.
     """
     if not mobile:
         return None
     m = mobile.strip().replace(" ", "")
-    # normalize a couple of common prefixes users type
     if m.startswith("+088"):
         m = "+880" + m[4:]
     if m.startswith("088"):
@@ -99,11 +97,9 @@ def normalize_bd_mobile(mobile: str) -> Optional[str]:
     if m.startswith("880"):
         m = "+" + m
     if not m.startswith("+880"):
-        # if they typed 01xxxxxxxxx
         if m.startswith("01") and len(m) == 11:
             m = "+88" + m
         else:
-            # fall back: ensure we at least stick + if they gave 880..........
             if m.startswith("88"):
                 m = "+" + m
     return m if BD_MOBILE_RE.match(m) else None
@@ -136,7 +132,6 @@ def _latest_requests(limit: int = 10) -> List[Dict[str, Any]]:
         )
         rows: List[Dict[str, Any]] = []
         for r in q:
-            # Be defensive: some fields may differ in your model; use getattr()
             rows.append(
                 {
                     "id": getattr(r, "id", None),
@@ -171,7 +166,6 @@ def _paginate_contacts(page: int, per_page: int) -> Dict[str, Any]:
             .limit(per_page)
         )
         items = []
-        # build rows for the template (keep both 'rows' and 'contacts' for safety)
         for idx, c in enumerate(q, start=offset + 1):
             items.append(
                 {
@@ -210,7 +204,6 @@ def register_routes(app: FastAPI) -> None:
         if redir:
             return redir
 
-        # Gather counts if model present; otherwise zeros.
         if RequestStatus is not None:
             try:
                 pending = _count_by_status(RequestStatus.PENDING)
@@ -249,7 +242,6 @@ def register_routes(app: FastAPI) -> None:
         rows = data["items"]
         total = data["total"]
         pages = data["pages"]
-        # NOTE: your contacts.html expects: page, per_page, total AND either rows or contacts.
         return render(
             request,
             "contacts.html",
@@ -276,7 +268,6 @@ def register_routes(app: FastAPI) -> None:
 
         normalized = normalize_bd_mobile(mobile)
         if not normalized:
-            # invalid number -> flash-like pattern via query param
             return RedirectResponse("/contacts?error=invalid_mobile", status_code=303)
 
         if Contact is None:
@@ -288,23 +279,20 @@ def register_routes(app: FastAPI) -> None:
                 s.add(c)
                 s.commit()
         except Exception:
-            # avoid breaking UX
             return RedirectResponse("/contacts?error=save_failed", status_code=303)
 
         return RedirectResponse("/contacts?ok=1", status_code=303)
 
-    # ----------------- Users (kept simple; avoid 'user is undefined') -----------------
+    # ----------------- Users -----------------
     @app.get("/users")
     def users(request: Request):
         redir = _login_required_redirect(request)
         if redir:
             return redir
 
-        # Make sure `user` exists in context via render(); template should now be safe
-        # If you have a list of users, you can load them here similarly to contacts.
         return render(request, "users.html", {"rows": []})
 
-    # ----------------- Requests (list-only skeleton; your existing template) -----------------
+    # ----------------- Requests -----------------
     @app.get("/requests")
     def requests_list(request: Request):
         redir = _login_required_redirect(request)
@@ -314,7 +302,7 @@ def register_routes(app: FastAPI) -> None:
         latest = _latest_requests(limit=10)
         return render(request, "requests.html", {"rows": latest})
 
-    # ----------------- Settings (fix 'conf is undefined') -----------------
+    # ----------------- Settings -----------------
     @app.get("/settings")
     def settings(request: Request):
         redir = _login_required_redirect(request)
