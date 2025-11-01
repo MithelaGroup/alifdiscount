@@ -1,45 +1,78 @@
-from datetime import datetime
-import os
-from types import SimpleNamespace
+# app/main.py
+from __future__ import annotations
 
-from fastapi import FastAPI, Request
+import os
+from datetime import datetime
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.staticfiles import StaticFiles
+from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import RedirectResponse
 from starlette.templating import Jinja2Templates
 
-from app.auth import router as auth_router  # your existing auth router
-from app.views import register_routes       # defined in views.py
+# ---- App & Config ---------------------------------------------------------
 
+app = FastAPI(title="ALIF Discount")
 
-def _build_conf():
-    return SimpleNamespace(
-        APP_NAME=os.getenv("APP_NAME", "ALIF Discount"),
-        APP_BASE_URL=os.getenv("APP_BASE_URL", ""),
-    )
+# Sessions (keep your existing SECRET_KEY env or .env)
+SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-env")
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
+# CORS (safe defaults; tweak if you need)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-def create_app() -> FastAPI:
-    app = FastAPI(title="ALIF Discount")
+# Static files
+if not os.path.exists("static"):
+    os.makedirs("static", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-    # Sessions (for login state in templates)
-    app.add_middleware(SessionMiddleware, secret_key=os.getenv("APP_SECRET", "change-me"))
+# Jinja
+templates = Jinja2Templates(directory="templates")
+templates.env.globals["now"] = lambda: datetime.now()  # {{ now() }} in templates
+app.state.templates = templates
 
-    # Static folder
-    app.mount("/static", StaticFiles(directory="static"), name="static")
+# Keep a small config object handy for templates (conf.APP_BASE_URL, etc.)
+try:
+    # your existing config.py
+    from app.config import Config as _Cfg  # type: ignore
+    app.state.conf = _Cfg()
+except Exception:
+    # very small fallback so templates work
+    class _FallbackConf:
+        APP_BASE_URL = os.getenv("APP_BASE_URL", "")
+        APP_NAME = "ALIF Discount"
+    app.state.conf = _FallbackConf()
 
-    # Templates
-    templates = Jinja2Templates(directory="templates")
-    # global helpers for Jinja
-    templates.env.globals["now"] = lambda: datetime.utcnow()
-    app.state.templates = templates
-    app.state.conf = _build_conf()
+# ---- Routers / Routes -----------------------------------------------------
 
-    # auth endpoints (login/logout)
-    app.include_router(auth_router)
+# Auth (don’t fail app startup if file differs)
+try:
+    from app import auth  # type: ignore
+    # Some projects expose register_routes(app) instead of APIRouter
+    if hasattr(auth, "router"):
+        app.include_router(auth.router)  # type: ignore[attr-defined]
+    elif hasattr(auth, "register_routes"):
+        auth.register_routes(app)  # type: ignore[attr-defined]
+except Exception:
+    pass
 
-    # page routes
-    register_routes(app)
-    return app
+# Page routes (dashboard, contacts, users, requests, enlist, settings, pwa…)
+from app.views import register_routes  # noqa: E402
 
+register_routes(app)
 
-app = create_app()
+# Root -> dashboard
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse("/dashboard", status_code=303)
+
+# Small healthcheck for your systemd service
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    return {"ok": True}
