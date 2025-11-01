@@ -1,86 +1,50 @@
-{# templates/partials/_modals_actions.html #}
-<style>
-.modal-backdrop {position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; z-index:50;}
-.modal {background:#0f172a; border:1px solid #1f2937; border-radius:14px; width:min(560px,94vw); padding:18px;}
-.modal-h {display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
-.modal-actions {display:flex; gap:8px; justify-content:flex-end; margin-top:14px;}
-.modal label {display:block; margin:8px 0 4px; font-size:0.9rem; opacity:.9;}
-.modal input, .modal select, .modal textarea {
-  width:100%; background:#0b1220; border:1px solid #263246; border-radius:10px; padding:10px 12px; color:#d1d5db;
-}
-.btn {padding:8px 12px; border-radius:10px; border:1px solid #324156; background:#111827; color:#d1d5db; cursor:pointer;}
-.btn.primary {background:#1f2a44;}
-.btn.danger {background:#3b0d0d; border-color:#4b1717;}
-.hidden {display:none;}
-</style>
-
-<div id="modal-backdrop" class="modal-backdrop">
-  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-    <div class="modal-h">
-      <h3 id="modal-title">Action</h3>
-      <button class="btn" data-close>&times;</button>
-    </div>
-
-    <form id="modal-form" method="post" action="#">
-      <div id="modal-approve" class="modal-section hidden">
-        <label for="group_id">Choose discount group</label>
-        <select id="group_id" name="group_id" required>
-          {% for g in groups %}
-          <option value="{{ g.id }}">{{ g.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div id="modal-reject" class="modal-section hidden">
-        <p>Are you sure you want to reject this request?</p>
-      </div>
-
-      <div id="modal-finalize" class="modal-section hidden">
-        <label for="invoice_number">Invoice number</label>
-        <input id="invoice_number" name="invoice_number" placeholder="e.g., INV-0001" required />
-        <label for="discount_amount">Discount amount (BDT)</label>
-        <input id="discount_amount" name="discount_amount" type="number" min="0" step="0.01" required />
-      </div>
-
+{# Approve modal #}
+<div class="modal" id="approve-{{ r.id }}" hidden>
+  <div class="modal-body">
+    <h3>Approve request {{ r.request_code }}</h3>
+    <form method="post" action="/requests/{{ r.id }}/approve">
+      <label class="label">Select discount group</label>
+      <select name="group_id" required>
+        {% for g in groups %}
+          <option value="{{ g.id }}">{{ g.name }} ({{ g.percent }}%)</option>
+        {% endfor %}
+      </select>
       <div class="modal-actions">
-        <button class="btn" type="button" data-close>Cancel</button>
-        <button class="btn primary" type="submit" id="modal-submit">Confirm</button>
+        <button type="button" class="btn outline" onclick="closeModal('approve-{{ r.id }}')">Cancel</button>
+        <button class="btn ok" type="submit">Confirm</button>
       </div>
     </form>
   </div>
 </div>
 
-<script>
-(function(){
-  const $ = (s, p=document)=>p.querySelector(s);
-  const $$ = (s, p=document)=>Array.from(p.querySelectorAll(s));
-  const back = $("#modal-backdrop");
-  const form = $("#modal-form");
-  const title = $("#modal-title");
-  const sections = $$(".modal-section");
-  const show = id => sections.forEach(el => el.classList.toggle("hidden", el.id !== id));
-  const open = (action, id) => {
-    form.action = `/requests/${id}/${action}`;
-    title.textContent = action.charAt(0).toUpperCase() + action.slice(1);
-    show(`modal-${action}`);
-    back.style.display = "flex";
-  };
-  const close = () => { back.style.display = "none"; };
+{# Reject modal #}
+<div class="modal" id="reject-{{ r.id }}" hidden>
+  <div class="modal-body">
+    <h3>Reject request {{ r.request_code }}</h3>
+    <form method="post" action="/requests/{{ r.id }}/reject">
+      <label class="label">Reason (optional)</label>
+      <textarea name="reason" rows="3" placeholder="Reason…"></textarea>
+      <div class="modal-actions">
+        <button type="button" class="btn outline" onclick="closeModal('reject-{{ r.id }}')">Cancel</button>
+        <button class="btn danger" type="submit">Reject</button>
+      </div>
+    </form>
+  </div>
+</div>
 
-  // Wire buttons in the table (expects data-action & data-id on the buttons)
-  document.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-action][data-id]");
-    if (btn) {
-      e.preventDefault();
-      open(btn.dataset.action, btn.dataset.id);
-    }
-    if (e.target.matches("[data-close]")) {
-      e.preventDefault();
-      close();
-    }
-  });
-
-  // ESC closes
-  document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") close(); });
-})();
-</script>
+{# Finalize modal #}
+<div class="modal" id="finalize-{{ r.id }}" hidden>
+  <div class="modal-body">
+    <h3>Finalize request {{ r.request_code }}</h3>
+    <form method="post" action="/requests/{{ r.id }}/done">
+      <label class="label">Invoice number</label>
+      <input name="invoice_number" required />
+      <label class="label">Discount amount (BDT)</label>
+      <input name="discount_amount" type="number" min="0" step="1" required />
+      <div class="modal-actions">
+        <button type="button" class="btn outline" onclick="closeModal('finalize-{{ r.id }}')">Cancel</button>
+        <button class="btn info" type="submit">Finalize</button>
+      </div>
+    </form>
+  </div>
+</div>
