@@ -1,317 +1,102 @@
-from __future__ import annotations
-
-import math
-import os
-import re
+from fastapi import Request
+from starlette.responses import RedirectResponse
 from datetime import datetime
-from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Form, Request
-from starlette.responses import RedirectResponse, Response
+# If you have models / DB, you can import and use them here.
+# from app.models_contact import Contact
+# from app.database import SessionLocal
 
-# --- DB / Models ---
-# IMPORTANT: use the single existing models module to avoid duplicate tables.
-# Do NOT import app.models_contact (it defines another 'contacts' table).
-try:
-    from app.database import SessionLocal  # typical FastAPI/SQLAlchemy pattern
-except Exception:  # pragma: no cover
-    SessionLocal = None  # we'll error loudly if this is None
+# ---------- helpers ----------
+def _user(request: Request):
+    return request.session.get("user")
 
-try:
-    # Your repo’s models (names inferred from your logs)
-    from app.models import Contact, Request as DiscountRequest, RequestStatus, User
-except Exception:
-    # if some model name differs, we handle later by falling back safely
-    Contact = None
-    DiscountRequest = None
-    RequestStatus = None
-    User = None
-
-# -------------------------
-# helpers & infrastructure
-# -------------------------
-
-def _get_user_from_session(request: Request) -> Optional[dict]:
+def _render(request: Request, template: str, extra: dict):
     """
-    We keep whatever you put in session["user"] (dict).
+    Central renderer that always injects:
+    - request (required by Jinja2Templates)
+    - user     (for navbar, role checks)
+    - now      (use {{ now.year }}, not now())
     """
-    u = request.session.get("user")
-    return u if isinstance(u, dict) else None
+    base = {"request": request, "user": _user(request), "now": datetime.now()}
+    base.update(extra or {})
+    return request.app.state.templates.TemplateResponse(template, base)
 
-
-def _app_conf() -> SimpleNamespace:
-    return SimpleNamespace(
-        APP_BASE_URL=os.getenv("APP_BASE_URL", ""),
-        ENV=os.getenv("ENV", "prod"),
-    )
-
-
-def render(request: Request, template_name: str, context: Optional[Dict[str, Any]] = None) -> Response:
-    """
-    Centralized renderer that injects common variables so templates don’t fail:
-      - request
-      - user
-      - conf (for settings.html)
-    NOTE: DO NOT inject a 'now' value here—Jinja global 'now()' is registered in main.py.
-    """
-    base: Dict[str, Any] = {
-        "request": request,
-        "user": _get_user_from_session(request),
-        "conf": _app_conf(),
-    }
-    if context:
-        base.update(context)
-    return request.app.state.templates.TemplateResponse(template_name, base)  # type: ignore[attr-defined]
-
-
-def _login_required_redirect(request: Request) -> Optional[RedirectResponse]:
-    """
-    If user not logged in, redirect to /login?next=<current>.
-    """
-    if not _get_user_from_session(request):
-        next_path = request.url.path or "/dashboard"
-        return RedirectResponse(f"/login?next={next_path}", status_code=303)
+def _require_login(request: Request, next_path: str):
+    if not _user(request):
+        return RedirectResponse(url=f"/login?next={next_path}", status_code=303)
     return None
 
+# ---------- page routes ----------
+def register_page_routes(app):
+    @app.get("/")
+    def root(request: Request):
+        # Send logged-in users to dashboard, others to login
+        if _user(request):
+            return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="/login?next=/dashboard", status_code=303)
 
-# ---------------
-# Phone helpers
-# ---------------
-BD_MOBILE_RE = re.compile(r"^\+8801[3-9]\d{8}$")
-
-def normalize_bd_mobile(mobile: str) -> Optional[str]:
-    """
-    Normalize/validate to E.164 BD format: +8801XXXXXXXXX.
-    - Accepts '+088...' and normalizes to '+880...'.
-    - Accepts '880...' and normalizes to '+880...'.
-    - Accepts '01XXXXXXXXX' and normalizes to '+8801XXXXXXXXX'.
-    """
-    if not mobile:
-        return None
-    m = mobile.strip().replace(" ", "")
-    if m.startswith("+088"):
-        m = "+880" + m[4:]
-    if m.startswith("088"):
-        m = "880" + m[3:]
-    if m.startswith("880"):
-        m = "+" + m
-    if not m.startswith("+880"):
-        if m.startswith("01") and len(m) == 11:
-            m = "+88" + m
-        else:
-            if m.startswith("88"):
-                m = "+" + m
-    return m if BD_MOBILE_RE.match(m) else None
-
-
-# ---------------
-# Queries
-# ---------------
-def _db():
-    if SessionLocal is None:
-        raise RuntimeError("SessionLocal not available; please check app.database")
-    return SessionLocal()
-
-
-def _count_by_status(status) -> int:
-    if DiscountRequest is None or RequestStatus is None:
-        return 0
-    with _db() as s:
-        return s.query(DiscountRequest).filter(DiscountRequest.status == status).count()
-
-
-def _latest_requests(limit: int = 10) -> List[Dict[str, Any]]:
-    if DiscountRequest is None:
-        return []
-    with _db() as s:
-        q = (
-            s.query(DiscountRequest)
-            .order_by(DiscountRequest.id.desc())  # type: ignore[attr-defined]
-            .limit(limit)
-        )
-        rows: List[Dict[str, Any]] = []
-        for r in q:
-            rows.append(
-                {
-                    "id": getattr(r, "id", None),
-                    "code": getattr(r, "id", None),
-                    "customer": getattr(r, "customer_name", "") or "",
-                    "mobile": getattr(r, "customer_mobile", "") or "",
-                    "cashier": getattr(r, "cashier_name", "") or "",
-                    "reference": getattr(r, "reference_no", "") or "",
-                    "approved_by": getattr(r, "approved_by", "") or "",
-                    "status": getattr(r, "status", None),
-                }
-            )
-        return rows
-
-
-def _paginate_contacts(page: int, per_page: int) -> Dict[str, Any]:
-    """
-    Returns dict with keys: items(list), total(int), page, per_page, pages
-    """
-    if Contact is None:
-        return {"items": [], "total": 0, "page": page, "per_page": per_page, "pages": 0}
-
-    with _db() as s:
-        total = s.query(Contact).count()
-        pages = math.ceil(total / per_page) if per_page > 0 else 1
-        page = max(1, min(page, pages or 1))
-        offset = (page - 1) * per_page
-        q = (
-            s.query(Contact)
-            .order_by(getattr(Contact, "id").desc())
-            .offset(offset)
-            .limit(per_page)
-        )
-        items = []
-        for idx, c in enumerate(q, start=offset + 1):
-            items.append(
-                {
-                    "sl": idx,
-                    "id": getattr(c, "id", None),
-                    "full_name": getattr(c, "full_name", "") or getattr(c, "name", ""),
-                    "mobile": getattr(c, "mobile", ""),
-                    "remarks": getattr(c, "remarks", ""),
-                    "created_at": getattr(c, "created_at", None),
-                }
-            )
-        return {"items": items, "total": total, "page": page, "per_page": per_page, "pages": pages}
-
-
-# ---------------
-# Routes
-# ---------------
-def register_routes(app: FastAPI) -> None:
-    # --------- Auth convenience (keep your existing login page intact) ---------
-    @app.get("/login")
-    def login_page(request: Request):
-        if _get_user_from_session(request):
-            return RedirectResponse("/dashboard", status_code=303)
-        # Keep your own login.html; we just pass context.
-        return render(request, "login.html", {})
-
-    @app.get("/logout")
-    def logout(request: Request):
-        request.session.pop("user", None)
-        return RedirectResponse("/login", status_code=303)
-
-    # ----------------- Dashboard -----------------
     @app.get("/dashboard")
     def dashboard(request: Request):
-        redir = _login_required_redirect(request)
-        if redir:
-            return redir
+        guard = _require_login(request, "/dashboard")
+        if guard:
+            return guard
 
-        if RequestStatus is not None:
-            try:
-                pending = _count_by_status(RequestStatus.PENDING)
-                approved = _count_by_status(RequestStatus.APPROVED)
-                done = _count_by_status(RequestStatus.DONE)
-            except Exception:
-                pending = approved = done = 0
-        else:
-            pending = approved = done = 0
+        # If you have real stats, compute them here.
+        stats = {"pending": 0, "approved": 0, "done": 0, "latest": []}
+        return _render(request, "dashboard.html", {"stats": stats})
 
-        latest = _latest_requests(limit=10)
-
-        return render(
-            request,
-            "dashboard.html",
-            {
-                "pending_count": pending,
-                "approved_count": approved,
-                "done_count": done,
-                "latest_rows": latest,
-            },
-        )
-
-    # ----------------- Contacts (list + create) -----------------
     @app.get("/contacts")
-    def contacts(request: Request, page: int = 1, per_page: int = 10):
-        redir = _login_required_redirect(request)
-        if redir:
-            return redir
+    def contacts_page(request: Request, page: int = 1, per_page: int = 10):
+        guard = _require_login(request, "/contacts")
+        if guard:
+            return guard
 
-        try:
-            data = _paginate_contacts(page=page, per_page=per_page)
-        except Exception:
-            data = {"items": [], "total": 0, "page": page, "per_page": per_page, "pages": 0}
-
-        rows = data["items"]
-        total = data["total"]
-        pages = data["pages"]
-        return render(
+        # If your updated contacts.html expects 'page', 'per_page', 'total' etc, provide them.
+        # Keep items empty list; your template can render "No contacts yet."
+        items = []
+        total = 0
+        return _render(
             request,
             "contacts.html",
-            {
-                "rows": rows,
-                "contacts": rows,  # alias for safety
-                "total": total,
-                "page": data["page"],
-                "per_page": data["per_page"],
-                "pages": pages,
-            },
+            {"contacts": items, "page": page, "per_page": per_page, "total": total},
         )
 
-    @app.post("/contacts/create")
-    def contacts_create(
-        request: Request,
-        full_name: str = Form(...),
-        mobile: str = Form(...),
-        remarks: str = Form(""),
-    ):
-        redir = _login_required_redirect(request)
-        if redir:
-            return redir
+    @app.get("/enlist")
+    def enlist(request: Request):
+        guard = _require_login(request, "/enlist")
+        if guard:
+            return guard
+        return _render(request, "enlist.html", {})
 
-        normalized = normalize_bd_mobile(mobile)
-        if not normalized:
-            return RedirectResponse("/contacts?error=invalid_mobile", status_code=303)
-
-        if Contact is None:
-            return RedirectResponse("/contacts?error=model_missing", status_code=303)
-
-        try:
-            with _db() as s:
-                c = Contact(full_name=full_name.strip(), mobile=normalized, remarks=remarks.strip())
-                s.add(c)
-                s.commit()
-        except Exception:
-            return RedirectResponse("/contacts?error=save_failed", status_code=303)
-
-        return RedirectResponse("/contacts?ok=1", status_code=303)
-
-    # ----------------- Users -----------------
     @app.get("/users")
-    def users(request: Request):
-        redir = _login_required_redirect(request)
-        if redir:
-            return redir
+    def users_page(request: Request):
+        guard = _require_login(request, "/users")
+        if guard:
+            return guard
+        return _render(request, "users.html", {"rows": []})
 
-        return render(request, "users.html", {"rows": []})
-
-    # ----------------- Requests -----------------
     @app.get("/requests")
-    def requests_list(request: Request):
-        redir = _login_required_redirect(request)
-        if redir:
-            return redir
+    def requests_page(request: Request, page: int = 1, per_page: int = 10):
+        guard = _require_login(request, "/requests")
+        if guard:
+            return guard
+        rows = []
+        total = 0
+        return _render(
+            request,
+            "requests.html",
+            {"rows": rows, "page": page, "per_page": per_page, "total": total},
+        )
 
-        latest = _latest_requests(limit=10)
-        return render(request, "requests.html", {"rows": latest})
-
-    # ----------------- Settings -----------------
     @app.get("/settings")
-    def settings(request: Request):
-        redir = _login_required_redirect(request)
-        if redir:
-            return redir
+    def settings_page(request: Request):
+        guard = _require_login(request, "/settings")
+        if guard:
+            return guard
+        # If your template used {{ conf.APP_BASE_URL }}, you can pass it here from env.
+        conf = {"APP_BASE_URL": ""}
+        return _render(request, "settings.html", {"conf": conf})
 
-        return render(request, "settings.html", {})
-
-    # ----------------- PWA -----------------
     @app.get("/pwa")
-    def pwa(request: Request):
-        return render(request, "pwa.html", {})
+    def pwa_page(request: Request):
+        return _render(request, "pwa.html", {})
