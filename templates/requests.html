@@ -1,89 +1,53 @@
 {% extends "base.html" %}
+{% block title %}Requests — ALIF Discount{% endblock %}
 {% block content %}
-<div class="page">
 
-  <div class="flex items-center justify-between mb-4">
-    <h2 class="h2">Requests</h2>
-    <div class="muted">Showing {{ requests|length if requests is defined else 0 }} items</div>
+<h2 class="h2">All Requests</h2>
+
+<section class="card">
+  <div class="card-h">
+    <h3>Requests</h3>
+    <div class="muted">latest 10</div>
   </div>
 
-  <div class="card">
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th style="width:110px;">Code</th>
-            <th>Customer Name & Mobile</th>
-            <th>Cashier</th>
-            <th>Reference of</th>
-            <th>Approved by</th>
-            <th style="width:120px;">Status</th>
-            <th style="width:360px;">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% set items = requests if requests is defined else [] %}
-          {% if items and items|length %}
-            {% for r in items %}
-            <tr id="row-{{ r.id }}">
-              <td class="mono">{{ r.request_code }}</td>
-              <td>
-                <div class="strong">{{ r.customer_name }}</div>
-                <div class="muted">{{ r.customer_mobile }}</div>
-              </td>
-              <td>{{ (r.created_by and r.created_by.username) or '-' }}</td>
-              <td>{{ (r.reference_user and r.reference_user.username) or '-' }}</td>
-              <td>{{ (r.approved_by and r.approved_by.username) or '-' }}</td>
-              <td>
-                {% if r.status in ['PENDING','REQUESTED'] %}
-                  <span class="badge warn">Requested</span>
-                {% elif r.status in ['APPROVED'] %}
-                  <span class="badge ok">Approved</span>
-                {% elif r.status in ['DONE','COMPLETED'] %}
-                  <span class="badge info">Completed</span>
-                {% elif r.status in ['REJECTED'] %}
-                  <span class="badge error">Rejected</span>
-                {% else %}
-                  <span class="badge">{{ r.status }}</span>
-                {% endif %}
-              </td>
-              <td class="actions">
-                {% if r.status in ['PENDING','REQUESTED'] %}
-                <button class="btn btn-sm btn-ok" data-action="approve" data-rid="{{ r.id }}">Approve</button>
-                {% endif %}
-
-                {% if r.status in ['APPROVED'] %}
-                <button class="btn btn-sm btn-info" data-action="finalize" data-rid="{{ r.id }}">Finalize</button>
-                {% endif %}
-
-                {% if r.status not in ['DONE','COMPLETED','REJECTED'] %}
-                <button class="btn btn-sm btn-warn" data-action="reject" data-rid="{{ r.id }}">Reject</button>
-                {% endif %}
-
-                <a class="btn btn-sm" href="/requests?rid={{ r.id }}" target="_blank" rel="noopener">Preview</a>
-                <button class="btn btn-sm btn-danger" data-action="delete" data-rid="{{ r.id }}" style="display:none;">Delete</button>
-              </td>
-            </tr>
-            {% endfor %}
-          {% else %}
-            <tr><td colspan="7" class="muted">No requests.</td></tr>
-          {% endif %}
-        </tbody>
-      </table>
+  <div class="table">
+    <div class="tr head">
+      <div>Code</div>
+      <div>Customer Name & Mobile</div>
+      <div>Cashier</div>
+      <div>Reference</div>
+      <div>Approved by</div>
+      <div>Status</div>
+      <div class="right">Actions</div>
     </div>
 
-    <div class="card-f">
-      <div class="grow"></div>
-      {% set page = page if page is defined else 1 %}
-      {% if page > 1 %}<a class="btn" href="/requests?p={{ page-1 }}">Previous</a>{% endif %}
-      <span class="muted">Page {{ page }}</span>
-      {% if has_next %}<a class="btn" href="/requests?p={{ page+1 }}">Next</a>{% endif %}
+    {% for r in latest %}
+    <div class="tr">
+      <div class="mono">{{ r.request_code }}</div>
+      <div>
+        <div class="strong">{{ r.customer_name }}</div>
+        <div class="muted">{{ r.customer_mobile }}</div>
+      </div>
+      <div>{{ r.cashier.username }}</div>
+      <div>{{ r.reference_user.username }}</div>
+      <div>{{ r.approved_by_user and r.approved_by_user.username or '-' }}</div>
+      <div>
+        {% if r.status == 'PENDING' %}<span class="badge warn">Requested</span>
+        {% elif r.status == 'APPROVED' %}<span class="badge ok">Approved</span>
+        {% elif r.status == 'DONE' %}<span class="badge info">Completed</span>
+        {% elif r.status == 'REJECTED' %}<span class="badge danger">Rejected</span>
+        {% else %}<span class="badge">{{ r.status }}</span>{% endif %}
+      </div>
+      <div class="right">
+        {% include 'partials/_row_actions.html' %}
+      </div>
     </div>
+
+    {% include 'partials/_modals_actions.html' %}
+    {% else %}
+      <div class="muted" style="padding:12px;">No requests found.</div>
+    {% endfor %}
   </div>
-</div>
-
-<!-- Reuse the same modals & scripts from dashboard -->
-{% include 'partials/_modals_actions.html' %}
-{% include 'partials/_scripts_actions.html' %}
+</section>
 
 {% endblock %}
