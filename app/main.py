@@ -1,46 +1,35 @@
-import os
-from datetime import datetime
-
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.staticfiles import StaticFiles
-from starlette.responses import RedirectResponse
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.templating import Jinja2Templates
+import os
+
+# Routers / views
+from app.views import register_page_routes
+from app.auth import auth_router
+
+# --------- App factory ----------
+def create_app() -> FastAPI:
+    app = FastAPI(title="ALIF Discount")
+
+    # Secret for server-side cookie session
+    secret = os.getenv("SECRET_KEY", "change-me-please")
+    app.add_middleware(SessionMiddleware, secret_key=secret, same_site="lax")
+
+    # Static + templates
+    if os.path.isdir("static"):
+        app.mount("/static", StaticFiles(directory="static"), name="static")
+
+    templates = Jinja2Templates(directory="templates")
+    app.state.templates = templates
+
+    # Routers
+    app.include_router(auth_router)             # /login, /logout
+    register_page_routes(app)                   # /dashboard, /contacts, /requests, etc.
+
+    return app
 
 
-# --- App bootstrap ---
-app = FastAPI(title="ALIF Discount")
-
-# Sessions
-SESSION_SECRET = os.getenv("SESSION_SECRET", "change-me-in-prod")
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=SESSION_SECRET,
-    same_site="lax",
-    https_only=False,  # set True if you force HTTPS
-    session_cookie="alif_session",
-)
-
-# Static & templates
-static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
-templates_dir = os.path.join(os.path.dirname(__file__), "..", "templates")
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-templates = Jinja2Templates(directory=templates_dir)
-
-# IMPORTANT: expose a callable now() to Jinja so {{ now().year }} works.
-templates.env.globals["now"] = datetime.utcnow
-
-app.state.templates = templates  # used by render() in views.py
-
-
-# Root redirect
-@app.get("/")
-def root():
-    return RedirectResponse("/dashboard", status_code=303)
-
-
-# Register app routes
-from app import views  # noqa: E402
-
-views.register_routes(app)
+# Uvicorn entrypoint expects `app`
+app = create_app()
