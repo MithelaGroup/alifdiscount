@@ -1,78 +1,60 @@
-# app/main.py
 from __future__ import annotations
 
 import os
 from datetime import datetime
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.middleware.cors import CORSMiddleware
-from starlette.responses import RedirectResponse
 from starlette.templating import Jinja2Templates
+from starlette.staticfiles import StaticFiles
 
-# ---- App & Config ---------------------------------------------------------
+from app import auth  # your existing auth module
+from app.routes_contacts import router as contacts_router  # NEW
 
-app = FastAPI(title="ALIF Discount")
+APP_DIR = os.path.dirname(__file__)
+TEMPLATES_DIR = os.path.join(APP_DIR, "..", "templates")
+STATIC_DIR = os.path.join(APP_DIR, "..", "static")
 
-# Sessions (keep your existing SECRET_KEY env or .env)
-SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-env")
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+def now():
+    return datetime.now()
 
-# CORS (safe defaults; tweak if you need)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def create_app() -> FastAPI:
+    app = FastAPI(title="ALIF Discount")
 
-# Static files
-if not os.path.exists("static"):
-    os.makedirs("static", exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+    # Static
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# Jinja
-templates = Jinja2Templates(directory="templates")
-templates.env.globals["now"] = lambda: datetime.now()  # {{ now() }} in templates
-app.state.templates = templates
+    # Templates
+    templates = Jinja2Templates(directory=TEMPLATES_DIR)
+    app.state.templates = templates
+    app.state.now = now  # expose to templates as callable
 
-# Keep a small config object handy for templates (conf.APP_BASE_URL, etc.)
-try:
-    # your existing config.py
-    from app.config import Config as _Cfg  # type: ignore
-    app.state.conf = _Cfg()
-except Exception:
-    # very small fallback so templates work
-    class _FallbackConf:
-        APP_BASE_URL = os.getenv("APP_BASE_URL", "")
-        APP_NAME = "ALIF Discount"
-    app.state.conf = _FallbackConf()
+    # Sessions & CORS
+    app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET", "change-me"))
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-# ---- Routers / Routes -----------------------------------------------------
+    # --- Routers ---
+    # keep your existing routes registration (auth/views/etc.)
+    # Example: app.include_router(auth.router)   # if you use APIRouter for auth
+    app.include_router(contacts_router)  # NEW: Contacts pages
 
-# Auth (don’t fail app startup if file differs)
-try:
-    from app import auth  # type: ignore
-    # Some projects expose register_routes(app) instead of APIRouter
-    if hasattr(auth, "router"):
-        app.include_router(auth.router)  # type: ignore[attr-defined]
-    elif hasattr(auth, "register_routes"):
-        auth.register_routes(app)  # type: ignore[attr-defined]
-except Exception:
-    pass
+    # Health
+    @app.get("/healthz")
+    def healthz():
+        return {"ok": True, "time": now().isoformat()}
 
-# Page routes (dashboard, contacts, users, requests, enlist, settings, pwa…)
-from app.views import register_routes  # noqa: E402
+    # Root -> dashboard or login
+    @app.get("/")
+    async def root(request: Request):
+        user = request.session.get("user")
+        return auth.redirect_to("/dashboard" if user else "/login")
 
-register_routes(app)
+    return app
 
-# Root -> dashboard
-@app.get("/", include_in_schema=False)
-def root():
-    return RedirectResponse("/dashboard", status_code=303)
-
-# Small healthcheck for your systemd service
-@app.get("/healthz", include_in_schema=False)
-def healthz():
-    return {"ok": True}
+app = create_app()
