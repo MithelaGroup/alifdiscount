@@ -4,6 +4,9 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 from fastapi import FastAPI, Request
 from starlette.responses import RedirectResponse
+from sqlalchemy.orm import Session
+from app.database import SessionLocal
+from app.models_contact import Contact
 
 # --- DB session helper (works with your current database.py) ---------------
 
