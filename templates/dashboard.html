@@ -1,127 +1,75 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — ALIF Discount{% endblock %}
+
 {% block content %}
+  <h2>Dashboard</h2>
 
-<h2 class="h2">Dashboard</h2>
+  <div class="tiles-3" style="margin:1rem 0 2rem;">
+    <section class="tile">
+      <h3 style="margin:0 0 .4rem;">Pending</h3>
+      <div class="count">{{ counts.pending if counts else 0 }}</div>
+      <p class="muted" style="margin-top:.6rem;">No pending requests.</p>
+    </section>
 
-<div class="cards3">
-  <!-- Pending -->
-  <section class="card">
-    <div class="card-h">
-      <h3>Pending</h3>
-      <span class="badge warn">{{ pending|length }}</span>
-    </div>
-    <div class="list">
-      {% for r in pending %}
-      <div class="row">
-        <div>
-          <div class="strong">{{ r.customer_name }}</div>
-          <div class="muted">{{ r.customer_mobile }}</div>
-        </div>
-        <div class="muted">{{ r.request_code }} • Ref: {{ r.reference_user.username }}</div>
-        <div><span class="badge warn">Pending</span></div>
-      </div>
-      {% else %}
-      <div class="muted">No pending requests.</div>
-      {% endfor %}
-    </div>
-  </section>
+    <section class="tile">
+      <h3 style="margin:0 0 .4rem;">Approved</h3>
+      <div class="count">{{ counts.approved if counts else 0 }}</div>
+      <p class="muted" style="margin-top:.6rem;">No approved requests.</p>
+    </section>
 
-  <!-- Approved -->
-  <section class="card">
-    <div class="card-h">
-      <h3>Approved</h3>
-      <span class="badge ok">{{ approved|length }}</span>
-    </div>
-    <div class="list">
-      {% for r in approved %}
-      <div class="row">
-        <div>
-          <div class="strong">{{ r.customer_name }}</div>
-          <div class="muted">{{ r.customer_mobile }}</div>
-        </div>
-        <div class="muted">
-          {{ r.request_code }} • {{ r.discount_percent }}%
-          {% if r.assigned_coupon %} • {{ r.assigned_coupon.code }}{% endif %}
-        </div>
-        <div><span class="badge ok">Approved</span></div>
-      </div>
-      {% else %}
-      <div class="muted">No approved requests.</div>
-      {% endfor %}
-    </div>
-  </section>
-
-  <!-- Done -->
-  <section class="card">
-    <div class="card-h">
-      <h3>Done</h3>
-      <span class="badge info">{{ done|length }}</span>
-    </div>
-    <div class="list">
-      {% for r in done %}
-      <div class="row">
-        <div>
-          <div class="strong">{{ r.customer_name }}</div>
-          <div class="muted">{{ r.customer_mobile }}</div>
-        </div>
-        <div class="muted">
-          {{ r.request_code }} • Invoice: {{ r.invoice_number }}
-        </div>
-        <div><span class="badge info">Done</span></div>
-      </div>
-      {% else %}
-      <div class="muted">No completed items.</div>
-      {% endfor %}
-    </div>
-  </section>
-</div>
-
-<!-- Latest requests table -->
-<section class="card" style="margin-top:18px;">
-  <div class="card-h">
-    <h3>Latest Requests</h3>
-    <div class="muted">max 10 per page</div>
+    <section class="tile">
+      <h3 style="margin:0 0 .4rem;">Done</h3>
+      <div class="count">{{ counts.done if counts else 0 }}</div>
+      <p class="muted" style="margin-top:.6rem;">No completed items.</p>
+    </section>
   </div>
 
-  <div class="table">
-    <div class="tr head">
-      <div>Code</div>
-      <div>Customer Name & Mobile</div>
-      <div>Cashier</div>
-      <div>Reference</div>
-      <div>Approved by</div>
-      <div>Status</div>
-      <div class="right">Actions</div>
-    </div>
+  <h3>Latest Requests</h3>
+  <p class="muted">max 10 per page</p>
 
-    {% for r in latest %}
-    <div class="tr">
-      <div class="mono">{{ r.request_code }}</div>
-      <div>
-        <div class="strong">{{ r.customer_name }}</div>
-        <div class="muted">{{ r.customer_mobile }}</div>
-      </div>
-      <div>{{ r.cashier.username }}</div>
-      <div>{{ r.reference_user.username }}</div>
-      <div>{{ r.approved_by_user and r.approved_by_user.username or '-' }}</div>
-      <div>
-        {% if r.status == 'PENDING' %}<span class="badge warn">Requested</span>
-        {% elif r.status == 'APPROVED' %}<span class="badge ok">Approved</span>
-        {% elif r.status == 'DONE' %}<span class="badge info">Completed</span>
-        {% elif r.status == 'REJECTED' %}<span class="badge danger">Rejected</span>
-        {% else %}<span class="badge">{{ r.status }}</span>{% endif %}
-      </div>
-      <div class="right">
-        {% include 'partials/_row_actions.html' %}
-      </div>
-    </div>
-
-    {% include 'partials/_modals_actions.html' %}
-    {% else %}
-      <div class="muted" style="padding:12px;">No requests yet.</div>
-    {% endfor %}
+  <div class="tile" style="padding:0;">
+    <table>
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Customer Name &amp; Mobile</th>
+          <th>Cashier</th>
+          <th>Reference of</th>
+          <th>Approved by</th>
+          <th>Status</th>
+          <th style="text-align:right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if latest_requests and latest_requests|length > 0 %}
+          {% for r in latest_requests %}
+            <tr>
+              <td>{{ r.code or r.id }}</td>
+              <td>
+                {% if r.customer_name %}{{ r.customer_name }}{% endif %}
+                {% if r.customer_phone %}<br><span class="muted">{{ r.customer_phone }}</span>{% endif %}
+              </td>
+              <td>{{ r.cashier_name or (r.created_by_name if r.created_by_name else "") }}</td>
+              <td>{{ r.reference_name or "" }}</td>
+              <td>{{ r.approved_by_name or "" }}</td>
+              <td>
+                {% if r.status == "requested" %}Requested{% elif r.status == "approved" %}Approved{% elif r.status == "completed" %}Completed{% elif r.status == "rejected" %}Rejected{% else %}{{ r.status }}{% endif %}
+              </td>
+              <td style="text-align:right;">
+                <!-- placeholder buttons (wire to your POST endpoints) -->
+                {% if r.status == "requested" %}
+                  <a class="btn" href="/requests/approve?id={{ r.id }}">Approve</a>
+                  <a class="btn" href="/requests/reject?id={{ r.id }}">Reject</a>
+                {% elif r.status == "approved" %}
+                  <a class="btn" href="/requests/finalize?id={{ r.id }}">Finalize</a>
+                {% endif %}
+                <a class="btn" href="/requests/preview?id={{ r.id }}">Preview</a>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr><td colspan="7" class="muted">No requests yet.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
   </div>
-</section>
-
 {% endblock %}
