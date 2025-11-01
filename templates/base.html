@@ -1,59 +1,50 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>{{ conf.APP_NAME if conf and conf.APP_NAME else "ALIF Discount" }}</title>
-  <link rel="icon" href="/static/favicon.ico">
-  <link rel="stylesheet" href="/static/styles.css">
+  <meta charset="utf-8">
+  <title>ALIF Discount</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="/static/site.css" rel="stylesheet">
   <style>
-    :root { --bg:#0f172a; --panel:#0b1222; --text:#dbeafe; --muted:#8aa0c8; --chip:#1e293b; --accent:#3b82f6; }
-    html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,Segoe UI,Inter,Arial}
-    a{color:#93c5fd;text-decoration:none}
-    .container{max-width:1180px;margin:0 auto;padding:24px}
-    .navbar{display:flex;align-items:center;gap:18px;padding:14px 24px;border-bottom:1px solid #132038;background:#0c1427;position:sticky;top:0;z-index:10}
-    .navbar .brand{font-weight:700}
-    .navbar .spacer{flex:1}
-    .btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:10px;background:#0e1a30;border:1px solid #22304b}
-    .btn.primary{background:#143159;border-color:#1e3a8a}
-    .muted{color:var(--muted)}
-    /* table */
-    table{width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden}
-    thead{background:#0c1629}
-    th,td{padding:12px 14px;border-bottom:1px solid #14213a}
-    /* tiles */
-    .tiles{display:grid;grid-template-columns:repeat(3,minmax(260px,1fr));gap:18px;margin:12px 0 28px}
-    .tile{background:var(--panel);border:1px solid #15233d;border-radius:14px;padding:18px}
-    .chip{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;background:#0e1b31;border:1px solid #1f2d47;font-size:12px}
-    footer{padding:28px 0;color:#93a4c7}
+    :root { --bg:#0f172a; --panel:#0b1220; --text:#e5e7eb; --muted:#9ca3af; --pill:#111827; --pill-b:#243b53; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    .bar { display:flex; align-items:center; gap:12px; padding:14px 20px; background:var(--panel); border-bottom:1px solid #111827; position:sticky; top:0; z-index:10; }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:700; }
+    .brand i { color:#4f46e5; }
+    nav { display:flex; gap:10px; flex-wrap:wrap;}
+    .pill { padding:8px 14px; border-radius:12px; background:#122036; border:1px solid #1f2a44; color:#dbeafe; text-decoration:none; display:inline-block; }
+    .spacer { flex:1; }
+    .btn { background:#1f2937; border:1px solid #374151; color:#e5e7eb; border-radius:12px; padding:8px 14px; text-decoration:none; }
+    .container { max-width:1100px; margin:0 auto; padding:26px 20px; }
+    .muted { color: var(--muted); }
+    footer { padding:30px 20px; }
   </style>
 </head>
 <body>
-  <nav class="navbar">
-    <div class="brand">🔷 {{ conf.APP_NAME if conf and conf.APP_NAME else "ALIF Discount" }}</div>
-
-    <a class="btn" href="/dashboard">Dashboard</a>
-    <a class="btn" href="/contacts">Contacts</a>
-    <a class="btn" href="/enlist">Enlist Coupon</a>
-    <a class="btn" href="/users">Users</a>
-    <a class="btn" href="/request/create">Request Create</a>
-    <a class="btn" href="/settings">Settings</a>
-    <a class="btn" href="/pwa">PWA</a>
-
+  <div class="bar">
+    <div class="brand"><i>◆</i> ALIF Discount</div>
+    <nav>
+      <a class="pill" href="/dashboard">Dashboard</a>
+      <a class="pill" href="/contacts">Contacts</a>
+      <a class="pill" href="/enlist">Enlist Coupon</a>
+      <a class="pill" href="/users">Users</a>
+      <a class="pill" href="/requests">Request Create</a>
+      <a class="pill" href="/settings">Settings</a>
+      <a class="pill" href="/pwa">PWA</a>
+    </nav>
     <div class="spacer"></div>
-
     {% if user %}
-      <span class="muted">Hi, {{ (user.full_name if user.full_name is defined and user.full_name) or (user.name if user.name is defined and user.name) or (user.username if user.username is defined and user.username) or "User" }}</span>
-      <a class="btn primary" href="/logout">Logout</a>
+      <span class="muted">Hi, {{ user.username }}</span>
+      <a class="btn" href="/logout">Logout</a>
     {% else %}
-      <a class="btn primary" href="/login">Login</a>
+      <a class="btn" href="/login">Login</a>
     {% endif %}
-  </nav>
+  </div>
 
   <main class="container">
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="container muted">© {{ now().year }} ALIF Discount</footer>
+  <footer class="container muted">© {{ now.year }} ALIF Discount</footer>
 </body>
 </html>
