@@ -2,61 +2,65 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>{% block title %}ALIF Discount{% endblock %}</title>
-  <link rel="icon" href="/static/favicon.ico" />
-  <link rel="manifest" href="/static/manifest.webmanifest">
-  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
-  <meta name="theme-color" content="#0b1220" />
-  <link rel="stylesheet" href="/static/app.css" />
-  <script defer src="/static/app.js"></script>
+  <link rel="icon" href="/static/favicon.ico">
   <style>
-    /* keep it here so you don’t need to hunt */
-    .nav { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-    .nav-right { margin-left:auto; display:flex; gap:10px; align-items:center; }
-    .nav-link { padding:7px 10px; border-radius:8px; color:var(--muted); }
-    .nav-link.active { background:#182238; color:var(--fg); }
-    .header { display:flex; align-items:center; gap:18px; padding:16px; }
-    .brand { display:flex; gap:8px; align-items:center; font-weight:700; }
-    .brand .emoji { filter:grayscale(0) }
-    /* just in case: ensure 3-up tiles on >=1024px */
-    @media (min-width:1024px){ .cards3{grid-template-columns:repeat(3,minmax(0,1fr))} }
+    :root{
+      --bg:#0e1726;--panel:#162132;--muted:#90a3b0;--txt:#e9eef3;--brand:#6ea8fe;--ok:#59d38a;--warn:#f2b705;--danger:#ef6a6a;
+      --radius:14px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,'Helvetica Neue',Arial}
+    a{color:var(--brand);text-decoration:none}
+    .wrap{max-width:1140px;margin:0 auto;padding:28px 20px}
+    header .bar{display:flex;align-items:center;gap:18px;padding:14px 0}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+    .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--brand);display:inline-block}
+    nav{display:flex;gap:12px;flex-wrap:wrap}
+    nav a{padding:8px 12px;border-radius:10px;color:var(--txt)}
+    nav a.active, nav a:hover{background:rgba(255,255,255,.08)}
+    .right{margin-left:auto}
+    footer{opacity:.75;padding:36px 0}
+    .panel{background:var(--panel);border-radius:var(--radius);padding:18px}
+    .grid3{display:grid;gap:16px}
+    @media (min-width:840px){ .grid3{grid-template-columns:repeat(3,1fr)} }
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.08);font-size:12px}
+    .badge.ok{background:rgba(89,211,138,.15)}
+    .badge.warn{background:rgba(242,183,5,.15)}
+    .badge.info{background:rgba(110,168,254,.15)}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06)}
+    th{font-weight:600;color:var(--muted);text-transform:uppercase;font-size:12px;letter-spacing:.04em}
+    .btn{padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.08);display:inline-flex;gap:6px}
+    .btn:hover{background:rgba(255,255,255,.14)}
+    .btn.ok{background:rgba(89,211,138,.2)} .btn.warn{background:rgba(242,183,5,.2)} .btn.danger{background:rgba(239,106,106,.2)}
   </style>
+  {% block head %}{% endblock %}
 </head>
 <body>
-  <div class="topbar">
-    <div class="page header">
-      <div class="brand">
-        <span class="emoji">💳</span> ALIF Discount
-      </div>
-
-      <nav class="nav">
-        <a class="nav-link {% if active=='dashboard' %}active{% endif %}" href="/dashboard">Dashboard</a>
-        <a class="nav-link {% if active=='contacts' %}active{% endif %}" href="/contacts">Contacts</a>
-        <a class="nav-link {% if active in ['enlist','coupons'] %}active{% endif %}" href="/enlist">Enlist Coupon</a>
-        <a class="nav-link {% if active=='users' %}active{% endif %}" href="/users">Users</a>
-        <a class="nav-link {% if active=='requests' %}active{% endif %}" href="/requests">Request Create</a>
-        <a class="nav-link {% if active=='settings' %}active{% endif %}" href="/settings">Settings</a>
-        <a class="nav-link {% if active=='pwa' %}active{% endif %}" href="/pwa">PWA</a>
+  <header class="wrap">
+    <div class="bar">
+      <div class="brand"><span class="dot"></span> ALIF Discount</div>
+      <nav>
+        <a href="/dashboard" class="{% if request.url.path.startswith('/dashboard') %}active{% endif %}">Dashboard</a>
+        <a href="/contacts"  class="{% if request.url.path.startswith('/contacts') %}active{% endif %}">Contacts</a>
+        <a href="/enlist"    class="{% if request.url.path.startswith('/enlist') %}active{% endif %}">Enlist Coupon</a>
+        <a href="/users"     class="{% if request.url.path.startswith('/users') %}active{% endif %}">Users</a>
+        <a href="/requests"  class="{% if request.url.path.startswith('/requests') %}active{% endif %}">Request Create</a>
+        <a href="/settings"  class="{% if request.url.path.startswith('/settings') %}active{% endif %}">Settings</a>
+        <a href="/pwa"       class="{% if request.url.path.startswith('/pwa') %}active{% endif %}">PWA</a>
       </nav>
-
-      <div class="nav-right">
-        {% if user %}
-          <span class="muted">Hi, {{ user.username }}</span>
-          <a class="btn outline" href="/logout">Logout</a>
-        {% else %}
-          <a class="btn outline" href="/login">Login</a>
-        {% endif %}
-      </div>
+      <div class="right"><a class="btn" href="/login">Login</a></div>
     </div>
-  </div>
+  </header>
 
-  <main class="page">
+  <main class="wrap">
     {% block content %}{% endblock %}
   </main>
 
-  <footer class="page" style="padding-top:8px; padding-bottom:24px;">
-    <div class="muted">© ALIF Discount</div>
+  <footer class="wrap">
+    <div>&copy; {{ (now() | default(None)) and "" }} ALIF Discount</div>
   </footer>
 </body>
 </html>
