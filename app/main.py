@@ -1,48 +1,67 @@
-# app/main.py
 from __future__ import annotations
 
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-from fastapi.templating import Jinja2Templates
 from starlette.staticfiles import StaticFiles
-
-from app.config import settings
+from starlette.templating import Jinja2Templates
 
 # Routers
-from app import auth, views
+from app import auth
+from app import views
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-TEMPLATES_DIR = BASE_DIR / "templates"
-STATIC_DIR = BASE_DIR / "static"
+APP_DIR = Path(__file__).resolve().parent
+ROOT_DIR = APP_DIR.parent
+TEMPLATES_DIR = ROOT_DIR / "templates"
+STATIC_DIR = ROOT_DIR / "static"
 
-app = FastAPI(title="ALIF Discount")
+def create_app() -> FastAPI:
+    app = FastAPI(title="ALIF Discount")
 
-# --- Sessions ---
-secret = (getattr(settings, "SECRET_KEY", None) or "change-this-secret")
-app.add_middleware(SessionMiddleware, secret_key=secret, same_site="lax")
+    # CORS (relaxed; tighten if you want)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+        allow_credentials=True,
+    )
 
-# --- CORS (liberal; tighten if needed) ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    # Sessions
+    session_secret = os.getenv("SESSION_SECRET", "dev-secret-change-me")
+    app.add_middleware(SessionMiddleware, secret_key=session_secret)
 
-# --- Static files ---
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    # Templates
+    templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-# --- Templates and Jinja globals ---
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-# make "now()" available in all templates
-templates.env.globals.update(now=datetime.utcnow, app_name="ALIF Discount")
-app.state.templates = templates  # so views/auth can always access
+    # jinja helpers (fixes: jinja2.exceptions.UndefinedError: 'now' is undefined)
+    def _now():
+        return datetime.now(timezone.utc)
 
-# --- Routers ---
-app.include_router(auth.router)
-app.include_router(views.router)
+    templates.env.globals.update({
+        "now": _now,
+    })
+
+    app.state.templates = templates  # for request.app.state.templates
+
+    # Static files
+    if STATIC_DIR.exists():
+        app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    # Routers
+    app.include_router(auth.router)
+    app.include_router(views.router)
+
+    # Health
+    @app.get("/healthz")
+    def healthz():
+        return {"ok": True, "ts": datetime.utcnow().isoformat()}
+
+    return app
+
+
+app = create_app()
