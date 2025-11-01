@@ -1,125 +1,160 @@
 {% extends "base.html" %}
+{% set page      = (page|default(1))|int %}
+{% set per_page  = (per_page|default(10))|int %}
+{% set rows      = rows|default(contacts|default([])) %}
+{% set total     = (total|default(rows|length))|int %}
 
-{% block title %}Contacts{% endblock %}
+{% block title %}Contacts — ALIF Discount{% endblock %}
+
+{% block head_extra %}
+<style>
+  /* Modal */
+  .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index: 50; }
+  .modal { width: 560px; max-width: 96vw; background: #0f172a; color: #e2e8f0; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.4); }
+  .modal header { padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,.08); display:flex; align-items:center; gap:10px; }
+  .modal header h3 { margin:0; font-weight:700; }
+  .modal .body { padding: 18px 20px 6px; }
+  .modal .actions { padding: 14px 20px 18px; display:flex; gap:10px; justify-content:flex-end; }
+  .form-grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  .form-row { display:flex; flex-direction:column; gap:6px; }
+  .input { background:#0b1220; color:#e2e8f0; border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:10px 12px; outline:none; }
+  .input:focus { border-color:#60a5fa; box-shadow: 0 0 0 2px rgba(96,165,250,.25); }
+  .ta { min-height: 92px; resize: vertical; }
+  .btn { background:#0b1220; color:#cbd5e1; border:1px solid rgba(255,255,255,.12); padding:8px 12px; border-radius:999px; font-weight:600; }
+  .btn:hover { border-color:#60a5fa; color:#e2e8f0; }
+  .btn-primary { background:#1e293b; border-color:#3b82f6; color:#e2e8f0; }
+  .btn-primary:hover { background:#3b82f6; color:white; }
+  .tag { font-size:12px; color:#94a3b8 }
+  .table { width:100%; border-collapse:separate; border-spacing:0 8px; }
+  .th, .td { text-align:left; padding:12px 14px; }
+  .tr { background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:12px; }
+  .th { color:#94a3b8; font-size:13px; }
+  .pagination { display:flex; gap:10px; align-items:center; }
+  .pill { padding:6px 12px; border-radius:999px; background:#0b1220; border:1px solid rgba(255,255,255,.12); color:#cbd5e1; }
+  .pill.active { border-color:#3b82f6; color:#e2e8f0; }
+</style>
+{% endblock %}
 
 {% block content %}
-<section class="section">
-  <div class="page-head">
-    <h1>📇 Contacts</h1>
-    <div class="actions">
-      <button id="btnOpenContact" class="btn btn-primary">➕ Create Contact</button>
-    </div>
+
+<div class="page-head">
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+    <h1>Contacts <span class="tag">📇 keep your people handy</span></h1>
+    <button class="btn btn-primary" id="btnOpenNewContact">➕ Create New Contact</button>
   </div>
+</div>
 
-  {% if request.query_params.get('err') == 'mobile' %}
-  <div class="alert alert-danger">Invalid mobile format. Please use <strong>+8801XXXXXXXXX</strong>.</div>
-  {% endif %}
+<!-- Create Contact Modal -->
+<div class="modal-mask" id="modalMask" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="contactModalTitle">
+    <header>
+      <h3 id="contactModalTitle">Create Contact</h3>
+    </header>
+    <form id="contactForm" method="post" action="/contacts/new" novalidate>
+      <div class="body">
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="full_name">Full Name</label>
+            <input class="input" id="full_name" name="full_name" placeholder="e.g., Anika Rahman" required>
+          </div>
+          <div class="form-row">
+            <label for="mobile">Mobile (BD)</label>
+            <input class="input" id="mobile" name="mobile" value="+880" pattern="^\+880[0-9]{10}$" placeholder="+8801XXXXXXXXX" required>
+            <small class="tag">Format: +8801XXXXXXXXX (11 digits after +880)</small>
+          </div>
+          <div class="form-row" style="grid-column:1/-1">
+            <label for="remarks">Remarks</label>
+            <textarea class="input ta" id="remarks" name="remarks" placeholder="Short note (optional)…"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn" id="btnCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Contact</button>
+      </div>
+    </form>
+  </div>
+</div>
 
-  {% if total == 0 %}
-    <p class="muted">No contacts yet.</p>
-  {% else %}
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th style="width:70px">SL</th>
-            <th>Full name</th>
-            <th>Mobile</th>
-            <th>Remark</th>
-          </tr>
-        </thead>
-        <tbody>
-        {% for r in rows %}
-          <tr>
-            <td>{{ (page - 1) * per_page + loop.index }}</td>
-            <td>{{ r.full_name }}</td>
-            <td>{{ r.mobile }}</td>
-            <td>{{ r.remark }}</td>
-          </tr>
+<!-- Table -->
+<div style="margin-top:18px">
+  <table class="table">
+    <thead>
+      <tr class="tr">
+        <th class="th">SL</th>
+        <th class="th">Full Name</th>
+        <th class="th">Mobile</th>
+        <th class="th">Remarks</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if rows and rows|length > 0 %}
+        {% for c in rows %}
+        <tr class="tr">
+          <td class="td">{{ (page-1)*per_page + loop.index }}</td>
+          <td class="td">{{ c.full_name }}</td>
+          <td class="td"><code>{{ c.mobile }}</code></td>
+          <td class="td">{{ c.remarks or "" }}</td>
+        </tr>
         {% endfor %}
-        </tbody>
-      </table>
-    </div>
+      {% else %}
+        <tr class="tr">
+          <td class="td" colspan="4">No contacts yet. Click <em>“Create New Contact”</em> to add one ✨</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
 
-    <div class="pager">
-      <div class="muted">
-        Showing {{ (page - 1) * per_page + 1 }}–{{ (page - 1) * per_page + rows|length }} of {{ total }}
-      </div>
-      <div>
-        {% if page > 1 %}
-          <a class="btn btn-secondary" href="/contacts?page={{ page - 1 }}&per_page={{ per_page }}">← Prev</a>
-        {% endif %}
-        <span class="muted">Page {{ page }} / {{ pages }}</span>
-        {% if page < pages %}
-          <a class="btn btn-secondary" href="/contacts?page={{ page + 1 }}&per_page={{ per_page }}">Next →</a>
-        {% endif %}
-      </div>
-    </div>
-  {% endif %}
-</section>
-
-<!-- Modal -->
-<dialog id="contactDialog" class="modal">
-  <form method="post" action="/contacts" class="card" id="contactForm">
-    <h3>➕ Create Contact</h3>
-
-    <label class="lbl">Full name</label>
-    <input class="inp" type="text" name="full_name" placeholder="e.g., Md. Rahim" required>
-
-    <label class="lbl">Mobile (BD)</label>
-    <div class="input-row">
-      <input class="inp" type="text" name="mobile_input" id="mobile_input"
-             value="+880" required
-             pattern="^\+8801[3-9]\d{8}$"
-             title="Use +8801XXXXXXXXX">
-      <small class="muted">Format: +8801XXXXXXXXX</small>
-    </div>
-
-    <label class="lbl">Remark</label>
-    <textarea class="inp" name="remark" rows="3" placeholder="Optional short note…"></textarea>
-
-    <div class="modal-actions">
-      <button type="button" class="btn" id="btnCloseContact">Cancel</button>
-      <button type="submit" class="btn btn-primary">Save</button>
-    </div>
-  </form>
-</dialog>
-
-<style>
-  .page-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; }
-  .table-wrap { overflow:auto; border-radius:12px; border:1px solid var(--border-color, #1f2b3a); }
-  .table { width:100%; border-collapse:separate; border-spacing:0; }
-  .table th, .table td { padding:.9rem 1rem; border-bottom:1px solid var(--border-color, #1f2b3a); }
-  .table thead th { font-weight:600; color:var(--text-weak,#9fb3c8); background:var(--panel,#0f1722); }
-  .pager { margin-top:1rem; display:flex; justify-content:space-between; align-items:center; }
-  .modal::backdrop { background: rgba(0,0,0,.55); }
-  .modal .card { width:min(560px, 92vw); padding:1.25rem; border-radius:16px; background:var(--panel,#0f1722); border:1px solid var(--border-color,#1f2b3a); }
-  .lbl { display:block; margin:.5rem 0 .35rem; font-weight:600; }
-  .inp { width:100%; padding:.7rem .8rem; border-radius:10px; border:1px solid var(--border-color,#1f2b3a); background:var(--panel,#0f1722); color:var(--text,#e3edf7); }
-  .input-row small { display:block; margin-top:.25rem; }
-  .modal-actions { display:flex; justify-content:flex-end; gap:.6rem; margin-top:1rem; }
-</style>
+<!-- Pager -->
+<div style="margin-top:10px; display:flex; align-items:center; justify-content:space-between;">
+  <div class="tag">
+    {% set shown = rows|length %}
+    {% if total>0 %}
+      Showing {{ (page-1)*per_page + 1 }}–{{ (page-1)*per_page + shown }} of {{ total }}
+    {% else %}
+      Showing 0 of 0
+    {% endif %}
+  </div>
+  <div class="pagination">
+    {% set prev = page-1 %}
+    {% set next = page+1 %}
+    <a class="pill{% if page<=1 %} disabled{% endif %}" href="/contacts?page={{ prev if page>1 else 1 }}&per_page={{ per_page }}">◀ Prev</a>
+    <span class="pill active">Page {{ page }}</span>
+    {% set maxpage = ((total + per_page - 1) // per_page)|int %}
+    <a class="pill{% if page>=maxpage and maxpage>0 %} disabled{% endif %}" href="/contacts?page={{ next if page<maxpage else maxpage }}&per_page={{ per_page }}">Next ▶</a>
+  </div>
+</div>
 
 <script>
-  const dlg = document.getElementById('contactDialog');
-  const openBtn = document.getElementById('btnOpenContact');
-  const closeBtn = document.getElementById('btnCloseContact');
-  const mobileInput = document.getElementById('mobile_input');
+  const mask = document.getElementById('modalMask');
+  const openBtn = document.getElementById('btnOpenNewContact');
+  const cancelBtn = document.getElementById('btnCancel');
+  const form = document.getElementById('contactForm');
+  const mobile = document.getElementById('mobile');
 
-  openBtn?.addEventListener('click', () => {
-    if (!mobileInput.value || !mobileInput.value.startsWith('+880')) {
-      mobileInput.value = '+880';
-    }
-    dlg.showModal();
-    mobileInput.focus();
+  function openModal(){ mask.style.display = 'flex'; mask.setAttribute('aria-hidden', 'false'); }
+  function closeModal(){ mask.style.display = 'none'; mask.setAttribute('aria-hidden', 'true'); }
+
+  openBtn?.addEventListener('click', openModal);
+  cancelBtn?.addEventListener('click', closeModal);
+  mask?.addEventListener('click', (e)=>{ if(e.target===mask) closeModal(); });
+
+  // Guard +880 prefix and validate length (11 digits after +880)
+  mobile?.addEventListener('input', () => {
+    if (!mobile.value.startsWith('+880')) mobile.value = '+880';
+    const rest = mobile.value.replace('+880','');
+    // only digits after +880
+    mobile.value = '+880' + rest.replace(/\D/g,'').slice(0,11);
   });
-  closeBtn?.addEventListener('click', () => dlg.close());
 
-  // Prevent users from deleting the +880 prefix entirely
-  mobileInput?.addEventListener('input', () => {
-    if (!mobileInput.value.startsWith('+880')) {
-      mobileInput.value = '+880';
+  form?.addEventListener('submit', (e) => {
+    const ok = /^\+880[0-9]{11}$/.test(mobile.value);
+    if(!ok){
+      e.preventDefault();
+      alert('Please enter a valid BD mobile number like +8801XXXXXXXXX (11 digits after +880).');
     }
   });
 </script>
+
 {% endblock %}
